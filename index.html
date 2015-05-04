@@ -23,33 +23,46 @@
 <body>
 
   <div id="container" class="container">
-    <header>
-    <h1>Australian Political Donations</h1>
-    <p>Shows a graph of donations to Australian political parties by fiscal year.</p>
-    </header>
-    <div id="controls">
-      <div id="controls-stuff">
-        <div id="year_selection" class="control">
-          <h3>Select Year</h3>
-          <select id="year_select" autocomplete="off">
-          </select>
-        </div>
-        <div id="party_selection" class="control">
-          <h3>Select political party</h3>
-          <select id="party_select" autocomplete="off">
-          </select>
-        </div>
-        <div id="receipt_type_selection" class="control">
-          <h3>Select Receipt Type</h3>
-          <select id="receipt_type_select" autocomplete="off">
-          </select>
-        </div>
-        <div id="search_section" class="control">
-          <h3>Search</h3>
-            <input type="text" class="text-input" id="search" value="" autocomplete="off"/></p>
+    <div id="heading">
+      <header>
+      <h1>Australian Political Donations</h1>
+      <p>Shows a graph of donations to Australian political parties by fiscal year.</p>
+      </header>
+      <div id="controls">
+        <div id="controls-stuff">
+          <div id="year_selection" class="control">
+            <h3>Select Year</h3>
+            <select id="year_select" autocomplete="off" multiple>
+            </select>
+          </div>
+          <div id="party_selection" class="control">
+            <h3>Select political party</h3>
+            <select id="party_select" autocomplete="off" multiple>
+            </select>
+          </div>
+          <div id="receipt_type_selection" class="control">
+            <h3>Select Receipt Type</h3>
+            <select id="receipt_type_select" autocomplete="off" multiple>
+            </select>
+          </div>
+          <div id="display_selection" class="control short">
+            <h3>Display</h3>
+            <select id="display_select" autocomplete="off">
+                <option value="0">All</option>
+                <option value="1">Top 20</option>
+                <option value="2">Top 50</option>
+                <option value="3">Top 10%</option>
+                <option value="4">Outliers</option>
+            </select>
+          </div>
+          <div id="search_section" class="control short">
+            <h3>Search</h3>
+              <input type="text" class="text-input" id="search" value="" autocomplete="off"/></p>
+          </div>
         </div>
       </div>
     </div>
+    <div id="show-controls"><a href="#">Show Filters</a></div>
     <div id="main" role="main">
       <div id="vis"></div>
     </div>

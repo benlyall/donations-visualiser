@@ -2,6 +2,13 @@ body {
   font-family: Arial, sans-serif;
 }
 
+#vis {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: -99;
+}
+
 a, a:visited {
   color: #4d4d4d;
   text-decoration: underline;
@@ -24,19 +31,20 @@ header {
 #controls {
     text-align: center;
     margin: 0 auto;
-    background-color: #eee;
+    background-color: rgba(238, 238, 238, .5);
     width: 100%;
 }
 
 #controls-stuff {
     margin: 0 auto;
     width: 1020px;
+    overflow: hidden;
 }
 
 #controls-stuff:after {
     content: " ";
     display: block;
-    height: 0;
+//    height: 0;
     clear: both;
 }
 
@@ -51,8 +59,18 @@ header {
 
 .control {
   float: left;
+  position: relative;
+  display: inline;
   padding-left: 20px;
-  min-height: 40px;
+  height: 140px;
+}
+
+.control.short {
+  height: 70px;
+}
+
+.control select[multiple] {
+  height: 100px;
 }
 
 .control a {

@@ -8,6 +8,7 @@ var w = window,
     height = y,
     parties, entites, receipts, receiptTypes,
     svg, selectedParty, selectedReceiptType, madeLinks, container, nodeElements, linkElements, messageElements,
+    selectedParties, selectedYears, selectedReceiptTypes,
     messageG, linksG, nodesG, drawLinks = [], drawNodes = [], nodes = [], selectedYear, nodeIds = {};
 
 d3.select("#tooltip").style("display", "none");
@@ -15,15 +16,6 @@ d3.select("#tooltip").style("display", "none");
 var zoom = d3.behavior.zoom()
                .scaleExtent([.1, 10])
                .on("zoom", zoomed);
-
-var heightElements = [ 'footer', 'header', '#controls' ],
-    otherHeight = 0;
-
-heightElements.forEach(function(l) {
-    otherHeight += d3.select(l).node().clientHeight;
-});
-
-height = y - otherHeight;
 
 var nodeColors = d3.scale.category20();
 
@@ -54,6 +46,21 @@ var force = d3.layout.force()
               .friction(0.75)
               .gravity(0.3)
               .on("tick", tick);
+
+d3.select("#show-controls a").on("click", show_controls);
+
+function show_controls() {
+    if (d3.selectAll("div#heading").style("height") == "0px") {
+        d3.selectAll("div#heading").transition().duration(300).style("height", "140px");
+        //d3.selectAll(".control").transition().duration(300).style("height", "140px");
+        //d3.selectAll(".control.short").transition().duration(300).style("height", "70px");
+    } else {
+        d3.selectAll("div#heading").transition().duration(300).style("height", 0);
+        //d3.selectAll(".control").transition().duration(300).style("height", 0);
+    }
+
+    return false;
+}
 
 
 d3.json("data/all_data.json", processData);
@@ -180,30 +187,29 @@ function filterAndUpdateData() {
 
     madeLinks = {};
 
-    selectedParty = d3.select("#party_select").node().value;
-    selectedYear = +d3.select("#year_select").node().value;
-    selectedReceiptType = +d3.select("#receipt_type_select").node().value;
-
-    selectedParty = selectedParty === "" ? -1 : +selectedParty;
     selectedReceiptType = selectedReceiptType === "" ? -1 : +selectedReceiptType;
+    selectedYears = [];
+    selectedParties = [];
+    selectedReceiptTypes = [];
 
-    var yearReceipts = receipts.filter(function(r) { return +r.Year === selectedYear; }),
+    d3.select("#year_select").selectAll("option").filter(function(d) { return this.selected; }).each(function(d) { selectedYears.push(+this.value); });
+    d3.select("#party_select").selectAll("option").filter(function(d) { return this.selected; }).each(function(d) { selectedParties.push(+this.value); });
+    d3.select("#receipt_type_select").selectAll("option").filter(function(d) { return this.selected; }).each(function(d) { selectedReceiptTypes.push(+this.value); });
+
+    var yearReceipts = receipts.filter(function(r) { return selectedYears.indexOf(+r.Year) != -1; }),
         allYearParties = d3.set(yearReceipts.map(function(r) { return r.Party; })).values();
 
     var ids = {};
     allYearParties.forEach(function(d) { return ids[parties[d]] = d; });
 
-    allYearParties = allYearParties.map(function(d) { return parties[d]; }).sort().map(function(d) { return ids[d]; });
-
-    allYearParties.splice(0, 0, "-1");
-
-    if (selectedParty !== -1) {
-        yearReceipts = yearReceipts.filter(function(r) { return +r.Party === selectedParty; });
+    allYearParties = allYearParties.map(function(d) { return parties[d]; }).sort().map(function(d) { return +ids[d]; });
+    if (selectedParties.length == 0) {
+        selectedParties = allYearParties;
     }
 
-    if (selectedReceiptType !== -1) {
-        yearReceipts = yearReceipts.filter(function(r) { return +r.Type === selectedReceiptType; });
-    }
+    yearReceipts = yearReceipts.filter(function(r) { return selectedParties.indexOf(+r.Party) != -1 });
+
+    yearReceipts = yearReceipts.filter(function(r) { return selectedReceiptTypes.indexOf(+r.Type) != -1; });
 
     var yearParties = d3.set(yearReceipts.map(function(r) { return r.Party; })).values(),
         yearEntities = d3.set(yearReceipts.map(function(r) { return r.Entity; })).values(),
@@ -215,14 +221,8 @@ function filterAndUpdateData() {
 
     party_select.enter().append("option");
     party_select.attr("value", function(d) { return d; })
-                .attr("selected", function(d) { return selectedParty === +d ? "selected" : null; })
-                .text(function(d) { 
-                    if (d == -1) {
-                        return 'All Parties';
-                    } else {
-                        return parties[d]; 
-                    }
-                });
+                .attr("selected", function(d) { return (selectedParties.indexOf(+d) != -1) ? "selected" : null; })
+                .text(function(d) { return parties[d]; });
     party_select.exit().remove();
 
     yearParties.forEach(function(p) {
@@ -283,25 +283,7 @@ function draw() {
                 .attr("text-anchor", "middle")
                 .attr("x", width/2)
                 .attr("y", height/2)
-                .text(function() {
-                    var msg = "No Data Found for";
-
-                    if (selectedParty != -1) {
-                        msg += " " + parties[selectedParty] + " for";
-                    }
-
-                    if (selectedReceiptType != -1 ) {
-                        for (var x in receipt_types) {
-                            if (receipt_types[x] === selectedReceiptType) {
-                                msg += " " + x + " for";
-                            }
-                        }
-                    }
-
-                    msg += " " + selectedYear + " - " + (selectedYear + 1) + "!";
-
-                    return msg;
-                })
+                .text("No Data Found!");
         linksG.selectAll("line.link").remove();
         nodesG.selectAll("circle.node").remove();
         return;
@@ -358,24 +340,23 @@ function processData(error, data) {
     var years = getYears();
 
     selectedYear = years[years.length-1];
-    selectedReceiptType = -1;
+    selectedReceiptTypes = d3.values(receipt_types);
 
     var all_receipt_types = d3.keys(receipt_types);
-    all_receipt_types.splice(0, 0, "All");
 
     d3.select("#receipt_type_select").selectAll("option")
         .data(all_receipt_types)
       .enter().append("option")
-        .attr("value", function(r) { return (r === "All") ? -1 : receipt_types[r]; })
-        .attr("selected", function(r) { return (receipt_types[r] == selectedReceiptType) ? "selected" : null; })
+        .attr("value", function(r) { return receipt_types[r]; })
+        .attr("selected", "selected")
         .text(function(r) { return r; });
 
 
     d3.select("#year_select").selectAll("option")
-        .data(d3.range(years[0], years[1]+1, 1))
+        .data(d3.range(years[1], years[0]-1, -1))
       .enter().append("option")
         .attr("value", function(y) { return y; })
-        .attr("selected", function(y) { return (y == selectedYear) ? "selected" : null; })
+        .attr("selected", function(y) { return (y == years[1]) ? "selected" : null; })
         .text(function(y) { return y + " - " + (y+1); });
 
     svg = d3.select("div#vis").append("svg").attr("width", width).attr("height", height);
@@ -388,7 +369,7 @@ function processData(error, data) {
 
     container = svg.append("g").attr("width", width).attr("height", height);
     linksG = container.append("g").attr("width", width).attr("height", height);
-    nodesG = container.append("g").attr("width", width).attr("height", height);
+    nodesG = container.append("g").attr("width", width).attr("height", height);;
     messageG = container.append("g").attr("width", width).attr("height", height);
 
     filterAndUpdateData();
