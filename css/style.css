@@ -1,126 +1,46 @@
+html, body {
+  //height: 100%;
+  overflow: hidden;
+}
+
 body {
-  font-family: Arial, sans-serif;
+  padding: 50px 0 0 0;
 }
 
-a, a:visited {
-  color: #4d4d4d;
-  text-decoration: underline;
+.body-content {
+    padding: 0;
 }
 
-#container {
-  width: 100%;
-  margin: auto;
-}
-
-#main {
-  clear: both;
-}
-
-header {
-    text-align: center;
-    margin: auto;
-}
-
-#controls {
-    text-align: center;
-    margin: 0 auto;
-    background-color: #eee;
-    width: 100%;
-}
-
-#controls-stuff {
-    margin: 0 auto;
-    width: 1020px;
-}
-
-#controls-stuff:after {
-    content: " ";
-    display: block;
-    height: 0;
-    clear: both;
-}
-
-#year-slider {
-    width: 80%;
-    margin: 0 auto;
-}
-
-.control-group {
-    margin-top: 4px;
-}
-
-.control {
+.navbar-toggle {
   float: left;
-  padding-left: 20px;
-  min-height: 40px;
+  margin-left: 15px;
 }
 
-.control a {
-  color: black;
-  font-size: 12px;
-  padding: 6px;
-  background: #E2E2E2;
-  cursor: pointer;
-  margin-right: 3px;
-  text-decoration: none;
-}
-
-.control a:hover {
-  text-decoration: underline;
-}
-
-.control a.active {
-  color: white;
-  background: #555;
-}
-
-footer {
+div#filter-button {
     position: absolute;
-    bottom: 0;
+    top: 60px;
+    left: 15px;
+}
+
+@media (min-width: 0) {
+  .navbar-toggle {
+    display: block; /* force showing the toggle */
+  }
+}
+
+form#filters {
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+form#filters label, form#filters input, form#filters select {
     width: 100%;
-    height: 20px;
-    background: #eee;
 }
 
-footer p {
-  text-align: center;
+.navbar-right {
+    margin-right: 15px !important;
 }
 
-.tooltip {
-  position: absolute;
-  top: 100px;
-  left: 100px;
-  -moz-border-radius:3px;
-  border-radius: 3px;
-  border: 2px solid #DDD;
-  background: #fff;
-  opacity: 1;
-  color: #000;
-  padding: 10px;
-  width: 300px;
-  font-size: 15px;
-  z-index: 120;
+.normal {
+    font-weight: normal;
 }
-
-.tooltip p.main {
-  font-size: 15px;
-  text-align: center;
-  padding:0;
-  margin:0;
-}
-
-hr.tooltip-hr {
-  padding:3px 0 0 0;
-  margin:3px 0 3px 0;
-}
-
-.tooltip .title {
-  font-size: 20px;
-  line-height: 24px;
-}
- 
-.tooltip .name {
-  font-weight:bold;
-}
-
-

@@ -2,10 +2,8 @@ var w = window,
     d = document,
     e = d.documentElement,
     g = d3.select("body").node(),
-    x = g.clientWidth,
-    y = w.innerHeight || e.clientHeight || g.clientHeight,
-    width = x,
-    height = y,
+    width = g.clientWidth,
+    height = w.innerHeight || e.clientHeight || g.clientHeight,
     parties, entites, receipts, receiptTypes,
     svg, selectedParties, selectedReceiptTypes, madeLinks, container, nodeElements, linkElements, messageElements,
     messageG, linksG, nodesG, drawLinks = [], drawNodes = [], nodes = [], selectedYears, nodeIds = {};
@@ -16,24 +14,13 @@ var zoom = d3.behavior.zoom()
                .scaleExtent([.1, 10])
                .on("zoom", zoomed);
 
-var heightElements = [ 'footer', 'header', '#controls' ],
-    otherHeight = 0;
-
-heightElements.forEach(function(l) {
-    otherHeight += d3.select(l).node().clientHeight;
-});
-
-height = y - otherHeight;
-
 var nodeColors = d3.scale.category20();
 
 var radiusScale = d3.scale.sqrt().range([5, 30]);
 
 var resizeWindow = function() {
-                       x = g.clientWidth,
-                       y = w.innerHeight || e.clientHeight || g.clientHeight,
-                       width = x,
-                       height = y - otherHeight;
+                       width = g.clientWidth,
+                       height = w.innerHeight || e.clientHeight || g.clientHeight,
 
                        svg.attr("width", width)
                            .attr("height", height);
@@ -41,6 +28,19 @@ var resizeWindow = function() {
                        force.size([width, height]);
                        force.start();
                     }
+d3.select(w).on("resize", resizeWindow);
+$('.navmenu-fixed-left').offcanvas({ autohide: false, toggle: false });
+$('.navmenu-fixed-left').offcanvas('hide');
+$('#navbar-toggle').on('click', function(d) {
+    $('.navmenu-fixed-left').offcanvas('toggle');
+    if (d3.select("#filter-button").style("left") == "15px") {
+        d3.select("#filter-button").transition().ease("linear").style("left", "315px");
+        d3.select("#navbar-toggle").html("<span class=\"glyphicon glyphicon-chevron-left\"></span>");
+    } else {
+        d3.select("#filter-button").transition().ease("linear").style("left", "15px");
+        d3.select("#navbar-toggle").html("<span class=\"glyphicon glyphicon-filter\"></span>");
+    }
+});
 
 var dollarFormat = d3.format("$,.0f");
 
@@ -61,6 +61,8 @@ d3.json("data/all_data.json", processData);
 function zoomed() {
     container.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
 }
+
+
 
 
 function radius(node) {
@@ -172,6 +174,11 @@ function neighbours(a, b) {
     return false;
 }
 
+function selectAllParties() {
+    d3.select("#party_select").selectAll("option").attr("selected", "selected");
+    filterAndUpdateData();
+}
+
 function filterAndUpdateData() {
     var totals = {};
 
@@ -189,17 +196,17 @@ function filterAndUpdateData() {
     d3.select("#receipt_type_select").selectAll("option").filter(function(d) { return this.selected; }).each(function(d) { selectedReceiptTypes.push(+this.value); });
 
     var yearReceipts = receipts.filter(function(r) { return selectedYears.indexOf(+r.Year) != -1; }),
-        allYearParties = d3.set(yearReceipts.map(function(r) { return r.Party; })).values();
+        allYearParties = d3.set(yearReceipts.map(function(r) { return +r.Party; })).values();
+
+    var ids = {};
+    allYearParties.forEach(function(d) { return ids[parties[d]] = d; });
+    allYearParties = allYearParties.map(function(d) { return parties[d]; }).sort().map(function(d) { return +ids[d]; });
 
     if (selectedParties.length == 0) {
         selectedParties = allYearParties;
     }
 
-    var ids = {};
-    allYearParties.forEach(function(d) { return ids[parties[d]] = d; });
-    allYearParties = allYearParties.map(function(d) { return parties[d]; }).sort().map(function(d) { return ids[d]; });
-
-    yearReceipts = yearReceipts.filter(function(r) { return selectedReceiptTypes.indexOf(+r.Type) != -1; });
+    yearReceipts = yearReceipts.filter(function(r) { return (selectedReceiptTypes.indexOf(+r.Type) != -1) && (selectedParties.indexOf(+r.Party) != -1); });
 
     var yearParties = d3.set(yearReceipts.map(function(r) { return r.Party; })).values(),
         yearEntities = d3.set(yearReceipts.map(function(r) { return r.Entity; })).values(),
