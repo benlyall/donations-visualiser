@@ -7,7 +7,7 @@
     <meta name="author" content="">
     <link rel="shortcut icon" href="../../assets/ico/favicon.png">
 
-    <title>Off Canvas Push Menu Template for Bootstrap</title>
+    <title>Australian Political Donations Visualiser</title>
 
     <!-- Bootstrap core CSS -->
     <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.4/css/bootstrap.min.css" />
@@ -24,21 +24,21 @@
         <p class="navmenu-brand" href="#">Filters</p>
         <form id="filters">
             <div class="form-group">
-                <label for="search">Search<span class="normal small pull-right">clear</span></label>
+                <label for="search">Search<a href="#"><span class="normal small pull-right" id="clear-search">clear</span></a></label>
                 <input type="text" class="text-input" id="search" value="" autocomplete="off"/>
             </div>
             <div class="form-group">
-                <label for="year_select">Select Years<span class="normal small pull-right">select all</span></label>
+                <label for="year_select">Select Years<a href="#"><span class="normal small pull-right" id="year-select-all">select all</span></a></label>
                 <select id="year_select" autocomplete="off" multiple>
                 </select>
             </div>
             <div class="form-group">
-                <label for="party_select">Select Parties<span class="normal small pull-right">select all</span></label>
+                <label for="party_select">Select Parties<a href="#"><span class="normal small pull-right" id="party-select-all">select all</span></a></label>
                 <select id="party_select" autocomplete="off" multiple>
                 </select>
             </div>
             <div class="form-group">
-                <label for="receipt_type_select">Select Type<span class="normal small pull-right">select all</span></label>
+                <label for="receipt_type_select">Select Type<a href="#"><span class="normal small pull-right" id="receipt-type-select-all">select all</span></a></label>
                 <select id="receipt_type_select" autocomplete="off" multiple>
                 </select>
             </div>
@@ -53,13 +53,50 @@
             </div>
         </form>
     </div>
+    <div class="navmenu navmenu-default navmenu-fixed-right offcanvas">
+        <p class="navmenu-brand" href="#">Information</p>
+        <div id="info-panel">
+            <h3>Nothing to display.</p>
+        </div>
+    </div>
 
-    <div id="filter-button"><button class="btn btn-default" type="button" id="navbar-toggle" title="Toggle filter panel"><span class="glyphicon glyphicon-filter"></span></button></div>
+    <div id="hover-info" style="display: none;"></div>
+    <div id="zoom-controls"><input type="range" orient="vertical" /></div>
+
+    <div id="filter-button"><button class="btn btn-default" type="button" id="filter-toggle" title="Toggle filter panel"><span class="glyphicon glyphicon-filter"></span></button></div>
+    <div id="info-button"><button class="btn btn-default" type="button" id="info-toggle" title="Toggle info panel"><span class="glyphicon glyphicon-info-sign"></span></button></div>
 
     <div class="navbar navbar-default navbar-fixed-top">
       <h4 class="navbar-text">Australian Political Donations</h4>
+      <button type="button" class="btn btn-default navbar-btn" data-toggle="modal" data-target="#about-modal">About</button>
       <p class="navbar-text navbar-right">Data obtained from <a class="navbar-link" href="http://periodicdisclosures.aec.gov.au/">AEC</a>.</p>
     </div>
+
+    <div class="modal fade" id="about-modal">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            <h4 class="modal-title">About</h4>
+          </div>
+          <div class="modal-body">
+            <p>The Political Donations visualisation website takes publically available data from the 
+               <a href="http://periodicdisclosures.aec.gov.au/">AEC</a> and presents it in a graphical view
+               to make visual analysis of the donations to all political parties in Australia easier and
+               more intuitive.</p>
+            <p>The data is present as a force directed layout showing both links and magnitudes of donations
+               to all major parties.  The data can be filtered and detailed information is available by clicking
+               on any node in the layout.</p>
+            <p>For questions or to provide feedback, please send email to <a href="mailto:info@politicaldonations.info">info@politicaldonations.info</a>.
+               We love to hear about users who are extracting useful information or educating themselves about the
+               level of donations that political parties in Australia receive.</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-dismiss="modal">OK</button>
+          </div>
+        </div><!-- /.modal-content -->
+      </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
 
     <div class="body-content container-fluid">
         <div id="vis"></div>

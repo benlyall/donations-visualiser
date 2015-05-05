@@ -8,11 +8,20 @@ var w = window,
     svg, selectedParties, selectedReceiptTypes, madeLinks, container, nodeElements, linkElements, messageElements,
     messageG, linksG, nodesG, drawLinks = [], drawNodes = [], nodes = [], selectedYears, nodeIds = {};
 
-d3.select("#tooltip").style("display", "none");
+d3.select("#hover-info").style("display", "none");
 
 var zoom = d3.behavior.zoom()
-               .scaleExtent([.1, 10])
+               .scale(1)
+               .scaleExtent([.2, 1.8])
                .on("zoom", zoomed);
+
+var slider = d3.select("#zoom-controls").select("input")
+    .datum({})
+    .attr("value", zoom.scale())
+    .attr("min", zoom.scaleExtent()[0])
+    .attr("max", zoom.scaleExtent()[1])
+    .attr("step", .1)
+    .on("input", slided);
 
 var nodeColors = d3.scale.category20();
 
@@ -31,16 +40,38 @@ var resizeWindow = function() {
 d3.select(w).on("resize", resizeWindow);
 $('.navmenu-fixed-left').offcanvas({ autohide: false, toggle: false });
 $('.navmenu-fixed-left').offcanvas('hide');
-$('#navbar-toggle').on('click', function(d) {
+$('#filter-toggle').on('click', function(d) {
     $('.navmenu-fixed-left').offcanvas('toggle');
-    if (d3.select("#filter-button").style("left") == "15px") {
-        d3.select("#filter-button").transition().ease("linear").style("left", "315px");
-        d3.select("#navbar-toggle").html("<span class=\"glyphicon glyphicon-chevron-left\"></span>");
+    if (d3.select("#filter-button").style("left") == "10px") {
+        d3.select("#filter-button").transition().ease("linear").style("left", "310px");
+        d3.select("#filter-toggle").html("<span class=\"glyphicon glyphicon-chevron-left\"></span>");
+        d3.select("#zoom-controls").transition().ease("linear").style("left", "324px");
     } else {
-        d3.select("#filter-button").transition().ease("linear").style("left", "15px");
-        d3.select("#navbar-toggle").html("<span class=\"glyphicon glyphicon-filter\"></span>");
+        d3.select("#filter-button").transition().ease("linear").style("left", "10px");
+        d3.select("#zoom-controls").transition().ease("linear").style("left", "24px");
+        d3.select("#filter-toggle").html("<span class=\"glyphicon glyphicon-filter\"></span>");
     }
 });
+
+$('.navmenu-fixed-right').offcanvas({autohide: false, toggle: false });
+$('.navmenu-fixed-right').offcanvas('hide');
+$('#info-toggle').on('click', function(d) {
+    $('.navmenu-fixed-right').offcanvas('toggle');
+    if (d3.select("#info-button").style("right") == "10px") {
+        d3.select("#info-button").transition().ease("linear").style("right", "310px");
+        d3.select("#info-toggle").html("<span class=\"glyphicon glyphicon-chevron-right\"></span>");
+    } else {
+        d3.select("#info-button").transition().ease("linear").style("right", "10px");
+        d3.select("#info-toggle").html("<span class=\"glyphicon glyphicon-info-sign\"></span>");
+    }
+});
+
+d3.select("#year-select-all").on("click", selectAllYears);
+d3.select("#party-select-all").on("click", selectAllParties);
+d3.select("#receipt-type-select-all").on("click", selectAllReceiptTypes);
+d3.select("#clear-search").on("click", clearSearch);
+
+
 
 var dollarFormat = d3.format("$,.0f");
 
@@ -60,10 +91,12 @@ d3.json("data/all_data.json", processData);
 
 function zoomed() {
     container.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+    slider.property("value", d3.event.scale);
 }
 
-
-
+function slided(d) {
+    zoom.scale(d3.select(this).property("value")).event(svg);
+}
 
 function radius(node) {
     if (node.Type === 'Party') {
@@ -109,13 +142,36 @@ function search() {
     });
 }
 
-function nodeOver(node, i) {
-    var tooltipContents = '<p class="main">' + node.Name + '</p>';
-        tooltipContents += '<hr class="tooltip-hr">';
-        tooltipContents += '<p class="main">' + dollarFormat(node.TotalAmount) + '</p>';
+function nodeClick(node, i) {
+    var html;
 
-    d3.select("#tooltip").html(tooltipContents);
-    d3.select("#tooltip").style("top", d3.event.y + 15 + "px")
+    if (node.Type == "Party") {
+        html = "<h3>" + node.Name + "</h3>\n";
+        html += "<hr />\n";
+        html += "<h4>Details</h4>\n";
+        html += "<p>Type: Party</p>\n";
+        html += "<p>Total Amount Received: " + dollarFormat(node.TotalAmount) + "</p>";
+    } else {
+        html = "<h3>" + node.Name + "</h3>\n";
+        html += "<hr />\n";
+        html += "<h4>Details</h4>\n";
+        html += "<p>Type: Payer</p>\n";
+        html += "<p>Total Amount Paid: " + dollarFormat(node.TotalAmount) + "</p>";
+    }
+
+    d3.select("#info-panel").html(html);
+    $('.navmenu-fixed-right').offcanvas('show');
+    d3.select("#info-button").transition().ease("linear").style("right", "310px");
+    d3.select("#info-toggle").html("<span class=\"glyphicon glyphicon-chevron-right\"></span>");
+}
+
+function nodeOver(node, i) {
+    var hoverInfo = '<p class="text-center">' + node.Name + '</p>';
+        hoverInfo += '<hr class="tooltip-hr">';
+        hoverInfo += '<p class="text-center">' + dollarFormat(node.TotalAmount) + '</p>';
+
+    d3.select("#hover-info").html(hoverInfo);
+    d3.select("#hover-info").style("top", d3.event.y + 15 + "px")
                          .style("left", d3.event.x + 15 + "px")
                          .style("display", null);
 
@@ -151,7 +207,7 @@ function nodeOver(node, i) {
 }
 
 function nodeOut(node, i) {
-    d3.select("#tooltip").style("display", "none");
+    d3.select("#hover-info").style("display", "none");
     linkElements.style("stroke", "#ddd")
                 .style("stroke-opacity", 0.5)
     nodeElements.style("stroke", function(n) {
@@ -174,9 +230,42 @@ function neighbours(a, b) {
     return false;
 }
 
-function selectAllParties() {
-    d3.select("#party_select").selectAll("option").attr("selected", "selected");
-    filterAndUpdateData();
+function selectAllParties(e) {
+    var party_select = d3.select("#party_select").selectAll("option"),
+        selected_parties = d3.select("#party_select").selectAll("option").filter(function(d) { return this.selected; });
+
+    d3.event.preventDefault();
+    if (party_select.size() != selected_parties.size()) {
+        party_select.attr("selected", "selected");
+        filterAndUpdateData();
+    }
+}
+
+function selectAllYears(e) {
+    var year_select = d3.select("#year_select").selectAll("option"),
+        selected_years = d3.select("#year_select").selectAll("option").filter(function(d) { return this.selected; });
+
+    d3.event.preventDefault();
+    if (year_select.size() != selected_years.size()) {
+        year_select.attr("selected", "selected");
+        filterAndUpdateData();
+    }
+}
+
+function selectAllReceiptTypes(e) {
+    var receipt_type_select = d3.select("#receipt_type_select").selectAll("option"),
+        selected_receipt_types = d3.select("#receipt_type_select").selectAll("option").filter(function(d) { return this.selected; });
+    d3.event.preventDefault();
+    if (receipt_type_select.size() != selected_receipt_types.size()) {
+        receipt_type_select.attr("selected", "selected");
+        filterAndUpdateData();
+    }
+}
+
+function clearSearch(e) {
+    d3.select("#search").property("value", "");
+    d3.event.preventDefault();
+    search();
 }
 
 function filterAndUpdateData() {
@@ -210,8 +299,8 @@ function filterAndUpdateData() {
 
     var yearParties = d3.set(yearReceipts.map(function(r) { return r.Party; })).values(),
         yearEntities = d3.set(yearReceipts.map(function(r) { return r.Entity; })).values(),
-        nodeIds = { entities: {}, parties: {} },
         i = 0;
+    nodeIds = { entities: {}, parties: {} };
 
     var party_select = d3.select("#party_select").selectAll("option")
                              .data(allYearParties, function(d) { return parties[d]; });
@@ -233,6 +322,7 @@ function filterAndUpdateData() {
             Type: 'Party',
             Name: parties[p],
             TotalAmount: 0,
+            links: [],
         };
 
         drawNodes.push(node);
@@ -245,6 +335,7 @@ function filterAndUpdateData() {
             Type: 'Entity',
             Name: entities[e].Name,
             TotalAmount: 0,
+            links: [],
         };
 
         drawNodes.push(node);
@@ -261,11 +352,23 @@ function filterAndUpdateData() {
             target: nodeIds['parties'][r.Party]
         };
 
+        var add = false;
+
         if (r.Entity in madeLinks) {
-            if (!(r.Party in madeLinks[r.Entity])) {
-                drawLinks.push(link);
+            if (madeLinks[r.Entity].indexOf(r.Party) == -1) {
+                madeLinks[r.Entity].push(r.Party);
+                add = true;
             }
         } else {
+            madeLinks[r.Entity] = [r.Party, ];
+            add = true;
+        }
+
+
+        if (add) {
+            drawNodes[nodeIds['parties'][r.Party]].links.push(link);
+            drawNodes[nodeIds['entities'][r.Entity]].links.push(link);
+
             drawLinks.push(link);
         }
     });
@@ -296,7 +399,9 @@ function draw() {
     nodeColors.domain(force.nodes().map(function(n) { return n.Name; }));
 
     nodeElements = nodesG.selectAll("circle.node")
-                       .data(force.nodes(), function(d) { return d.Name; });
+                       .data(force.nodes(), function(d, i) { 
+                           return d.Name + "-" + i; 
+                       });
 
     nodeElements.enter().append("circle").attr("class", "node");
     nodeElements.attr("r", function(n) { return radiusScale(n.TotalAmount); }).attr("id", function(d, i) { return i; })
@@ -304,6 +409,7 @@ function draw() {
                 .style("stroke-width", 1.0)
                 .style("fill", function(d, i) { return nodeColors(d.Name); })
                 .on("mouseover", nodeOver)
+                .on("click", nodeClick)
                 .on("mouseout", nodeOut);
     nodeElements.exit().remove();
     nodeElements.attr("title", function(n) { 
