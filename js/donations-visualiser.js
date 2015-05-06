@@ -4,7 +4,7 @@ var w = window,
     g = d3.select("body").node(),
     width = g.clientWidth,
     height = w.innerHeight || e.clientHeight || g.clientHeight,
-    parties, entites, receipts, receiptTypes,
+    parties, entites, receipts, receiptTypes, clickedNode,
     svg, selectedParties, selectedReceiptTypes, madeLinks, container, nodeElements, linkElements, messageElements,
     messageG, linksG, nodesG, drawLinks = [], drawNodes = [], nodes = [], selectedYears, nodeIds = {};
 
@@ -143,23 +143,121 @@ function search() {
 }
 
 function nodeClick(node, i) {
+    clickedNode = node;
+    updateInfoPanel();
+}
+
+function updateInfoPanel() {
+    if (clickedNode == null) return;
     var html;
 
-    if (node.Type == "Party") {
-        html = "<h3>" + node.Name + "</h3>\n";
+    if (clickedNode.Type == "Party") {
+        var party = parties.indexOf(clickedNode.Name),
+            party_receipts = receipts.filter(function(r) { return selectedReceiptTypes.indexOf(+r.Type) != -1 && r.Party == party; }),
+            year_party_receipts = party_receipts.filter(function(r) { return selectedYears.indexOf(+r.Year) != -1; }),
+            totalAmount = d3.sum(year_party_receipts, function(d) { return d.Amount; }),
+            yearTotals = d3.nest().key(function(d) { return d.Year; })
+                                  .rollup(function(leaves) { return d3.sum(leaves, function(d) { return d.Amount; }); })
+                                  .entries(party_receipts);
+            top10 = d3.nest()
+                        .key(function(d) { return d.Entity; })
+                        .rollup(function(leaves) { return d3.sum(leaves, function(d) { return d.Amount; }); })
+                        .entries(year_party_receipts)
+                        .sort(function(a, b) { return b.values - a.values; });
+        if (top10.length > 10) {
+            top10 = top10.slice(0,10);
+        }
+
+        html = "<h3><a href=\"http://www.google.com/#q="+ clickedNode.Name + "\" title=\"Search Google for this Party\" target=\"_blank\">" + clickedNode.Name + "</a></h3>\n";
         html += "<hr />\n";
         html += "<h4>Details</h4>\n";
         html += "<p>Type: Party</p>\n";
-        html += "<p>Total Amount Received: " + dollarFormat(node.TotalAmount) + "</p>";
+        html += "<p>Total Amount Received: " + dollarFormat(totalAmount) + "</p>";
+        html += "<p>Top 10 Payers:</p>\n";
+        html += "<table class=\"table table-striped table-condensed table-hover\"><tbody>\n";
+        top10.forEach(function(d) {
+            html += "<tr><td class=\"small\">" + entities[d.key].Name + "</td><td class=\"pull-right small\"> " + dollarFormat(d.values) + "</td></tr>\n";
+        });
+        html += "</tbody></table>\n";
+        html += "<h4>Total Amounts Received</h4>\n";
     } else {
-        html = "<h3>" + node.Name + "</h3>\n";
+        var entity = -1;
+
+        entities.forEach(function(d, i) { if (d.Name == clickedNode.Name) entity = i; });
+
+        var entity_receipts = receipts.filter(function(r) { return selectedReceiptTypes.indexOf(+r.Type) != -1 && r.Entity == entity; }),
+            year_entity_receipts = entity_receipts.filter(function(r) { return selectedYears.indexOf(+r.Year) != -1; }),
+            totalAmount = d3.sum(year_entity_receipts, function(d) { return d.Amount; }),
+            yearTotals = d3.nest().key(function(d) { return d.Year; })
+                                  .rollup(function(leaves) { return d3.sum(leaves, function(d) { return d.Amount; }); })
+                                  .entries(entity_receipts);
+            top10 = d3.nest()
+                        .key(function(d) { return d.Party; })
+                        .rollup(function(leaves) { return d3.sum(leaves, function(d) { return d.Amount; }); })
+                        .entries(year_entity_receipts)
+                        .sort(function(a, b) { return b.values - a.values; });
+
+        if (top10.length > 10) {
+            top10 = top10.slice(0, 10);
+        }
+        html = "<h3><a href=\"http://www.google.com/#q="+ clickedNode.Name + "\" title=\"Search Google for this Entity\" target=\"_blank\">" + clickedNode.Name + "</a></h3>\n";
         html += "<hr />\n";
         html += "<h4>Details</h4>\n";
         html += "<p>Type: Payer</p>\n";
-        html += "<p>Total Amount Paid: " + dollarFormat(node.TotalAmount) + "</p>";
+        html += "<p>Total Amount Paid: " + dollarFormat(totalAmount) + "</p>";
+        html += "<p>Top 10 Receivers:</p>\n";
+        html += "<table class=\"table table-striped table-condensed table-hover\"><tbody>\n";
+        top10.forEach(function(d) {
+            html += "<tr><td class=\"small\">" + parties[d.key] + "</td><td class=\"pull-right small\"> " + dollarFormat(d.values) + "</td></tr>\n";
+        });
+        html += "</tbody></table>\n";
+        html += "<h4>Total Amounts Paid</h4>\n";
     }
 
+
     d3.select("#info-panel").html(html);
+
+    var margins = { top: 0, right: 0, bottom: 25, left: 30 },
+        chartWidth = 270 - margins.left - margins.right,
+        chartHeight = 120 - margins.top - margins.bottom,
+        years = getYears(),
+        x = d3.scale.ordinal().domain(d3.range(years[0], years[1] +1, 1)).rangeRoundBands([0, chartWidth]),
+        y = d3.scale.linear().domain([0, d3.max(yearTotals, function(d) { return d.values; })]).range([chartHeight, 0]),
+        xAxis = d3.svg.axis()
+            .scale(x)
+            .orient("bottom")
+            .tickValues(x.domain().filter(function(d, i) { return i % 2 == 0; })),
+        yAxis = d3.svg.axis()
+            .scale(y)
+            .orient("left")
+            .ticks(5, "$s"),
+        chart = d3.select("#info-panel").append("svg")
+                    .attr("width", chartWidth + margins.left + margins.right)
+                    .attr("height", chartHeight + margins.top + margins.bottom)
+                  .append("g")
+                    .attr("transform", "translate(" + margins.left + "," + margins.top + ")");
+
+
+        chart.append("g")
+            .attr("class", "x axis")
+            .attr("transform", "translate(0," + chartHeight + ")")
+            .call(xAxis);
+
+        chart.append("g")
+            .attr("class", "y axis")
+            .call(yAxis);
+
+        chart.selectAll("rect.bar")
+            .data(yearTotals)
+          .enter().append("rect")
+            .attr("class", "bar")
+            .attr("title", function(d) { return d.key + ": " + dollarFormat(d.values); })
+            .attr("x", function(d) { return x(+d.key) + 1; })
+            .attr("y", function(d) { return y(d.values); })
+            .attr("height", function(d) { return chartHeight - y(d.values); })
+            .attr("width", x.rangeBand() - 4);
+
+
     $('.navmenu-fixed-right').offcanvas('show');
     d3.select("#info-button").transition().ease("linear").style("right", "310px");
     d3.select("#info-toggle").html("<span class=\"glyphicon glyphicon-chevron-right\"></span>");
@@ -375,6 +473,7 @@ function filterAndUpdateData() {
 
     draw();
     search();
+    updateInfoPanel();
 }
 
 function draw() {

@@ -112,3 +112,17 @@ input[type=range][orient=vertical]
     padding: 0 5px;
 }
 
+.bar {
+  fill: #337ab7;
+}
+
+.axis text {
+  font: 10px sans-serif;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}

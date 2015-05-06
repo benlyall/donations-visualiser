@@ -16,7 +16,6 @@
     <!-- Custom styles for this template -->
     <link rel="stylesheet" href="/css/style.css" />
 
-
   </head>
 
   <body>
@@ -56,21 +55,61 @@
     <div class="navmenu navmenu-default navmenu-fixed-right offcanvas">
         <p class="navmenu-brand" href="#">Information</p>
         <div id="info-panel">
-            <h3>Nothing to display.</p>
+            <h4>Click on a node to display details.</h4>
         </div>
     </div>
 
     <div id="hover-info" style="display: none;"></div>
-    <div id="zoom-controls"><input type="range" orient="vertical" /></div>
+    <div id="zoom-controls"><button<input type="range" orient="vertical" /></div>
 
     <div id="filter-button"><button class="btn btn-default" type="button" id="filter-toggle" title="Toggle filter panel"><span class="glyphicon glyphicon-filter"></span></button></div>
     <div id="info-button"><button class="btn btn-default" type="button" id="info-toggle" title="Toggle info panel"><span class="glyphicon glyphicon-info-sign"></span></button></div>
 
     <div class="navbar navbar-default navbar-fixed-top">
       <h4 class="navbar-text">Australian Political Donations</h4>
-      <button type="button" class="btn btn-default navbar-btn" data-toggle="modal" data-target="#about-modal">About</button>
+      <button type="button" class="btn btn-primary navbar-btn" data-toggle="modal" data-target="#about-modal">About</button>
+      <button type="button" class="btn btn-primary navbar-btn" data-toggle="modal" data-target="#info-modal">Information</button>
       <p class="navbar-text navbar-right">Data obtained from <a class="navbar-link" href="http://periodicdisclosures.aec.gov.au/">AEC</a>.</p>
     </div>
+
+    <div class="modal fade" id="info-modal">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            <h4 class="modal-title">Information</h4>
+          </div>
+          <div class="modal-body">
+            <p>Using this website is relatively straight forward.  The main display shows a force directed graph
+               of political parties and the information they have reported to the 
+               <a href="http://periodicdisclosures.aec.gov.au/">AEC</a> declaring the receipts that they have received.
+               Political parties are required by Australian law to provide this information on a yearly basis for all
+               amounts greater than $12,400. Donors to political parties in Australia must also declare their donations.</p>
+            <p>This information is required to be provided to the AEC by 17 November each year and is subsequently made public
+               by the AEC.</p>
+            <p>All periodic disclosures published by the AEC is available for analysis.  Filters can help you extract meaningful
+               information.  The filters can be accessed by clicking on the <span class="glyphicon glyphicon-filter"></span> icon 
+               on the upper left of the chart.  This will open the filter controls, allowing you to search for a party or donor, 
+               select the years, parties or receipt types that interest you and also change the type of the display to a number 
+               of different options.</p>
+            <p>It is possible that by selecting certain combinations of filters (in particular, multiple years) that the amount of
+               data displayed could result in slow performance.  If this happens you can limit your filters to return a more
+               restrictive set of data.</p>
+            <p>It is also possible to zoom in and out of the chart by either using your mouse scroll wheel, track pad or the slider
+               control under the filter controls toggle button.</p>
+            <p>Additional information regarding any party or entity on the main chart is displayed if you click on a node.  This
+               will open the information panel on the right of the main display.  This panel can be toggled by clicking on the
+               <span class="glyphicon glyphicon-info-sign"></span> button, located in the upper right of the main display.</p>
+            <p>We love receiving feedback, and you can reach us at 
+               <a href="mailto:info@politicaldonations.info">info@politicaldonations.info</a>.  We do our best to read
+               and reply to all messages.</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-dismiss="modal">OK</button>
+          </div>
+        </div><!-- /.modal-content -->
+      </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
 
     <div class="modal fade" id="about-modal">
       <div class="modal-dialog">
