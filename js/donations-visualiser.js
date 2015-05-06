@@ -4,7 +4,7 @@ var w = window,
     g = d3.select("body").node(),
     width = g.clientWidth,
     height = w.innerHeight || e.clientHeight || g.clientHeight,
-    parties, entites, receipts, receiptTypes, clickedNode,
+    parties, entites, receipts, receiptTypes, clickedNode, infoShown = false, filterShown = false,
     svg, selectedParties, selectedReceiptTypes, madeLinks, container, nodeElements, linkElements, messageElements,
     messageG, linksG, nodesG, drawLinks = [], drawNodes = [], nodes = [], selectedYears, nodeIds = {};
 
@@ -42,14 +42,16 @@ $('.navmenu-fixed-left').offcanvas({ autohide: false, toggle: false });
 $('.navmenu-fixed-left').offcanvas('hide');
 $('#filter-toggle').on('click', function(d) {
     $('.navmenu-fixed-left').offcanvas('toggle');
-    if (d3.select("#filter-button").style("left") == "10px") {
-        d3.select("#filter-button").transition().ease("linear").style("left", "310px");
-        d3.select("#filter-toggle").html("<span class=\"glyphicon glyphicon-chevron-left\"></span>");
-        d3.select("#zoom-controls").transition().ease("linear").style("left", "324px");
-    } else {
+    if (filterShown) {
         d3.select("#filter-button").transition().ease("linear").style("left", "10px");
         d3.select("#zoom-controls").transition().ease("linear").style("left", "24px");
         d3.select("#filter-toggle").html("<span class=\"glyphicon glyphicon-filter\"></span>");
+        filterShown = false;
+    } else {
+        d3.select("#filter-button").transition().ease("linear").style("left", "310px");
+        d3.select("#filter-toggle").html("<span class=\"glyphicon glyphicon-chevron-left\"></span>");
+        d3.select("#zoom-controls").transition().ease("linear").style("left", "324px");
+        filterShown = true;
     }
 });
 
@@ -57,12 +59,14 @@ $('.navmenu-fixed-right').offcanvas({autohide: false, toggle: false });
 $('.navmenu-fixed-right').offcanvas('hide');
 $('#info-toggle').on('click', function(d) {
     $('.navmenu-fixed-right').offcanvas('toggle');
-    if (d3.select("#info-button").style("right") == "10px") {
-        d3.select("#info-button").transition().ease("linear").style("right", "310px");
-        d3.select("#info-toggle").html("<span class=\"glyphicon glyphicon-chevron-right\"></span>");
-    } else {
+    if (infoShown) {
         d3.select("#info-button").transition().ease("linear").style("right", "10px");
         d3.select("#info-toggle").html("<span class=\"glyphicon glyphicon-info-sign\"></span>");
+        infoShown = false;
+    } else {
+        d3.select("#info-button").transition().ease("linear").style("right", "310px");
+        d3.select("#info-toggle").html("<span class=\"glyphicon glyphicon-chevron-right\"></span>");
+        infoShown = true;
     }
 });
 
@@ -259,6 +263,7 @@ function updateInfoPanel() {
 
 
     $('.navmenu-fixed-right').offcanvas('show');
+    infoShown = true;
     d3.select("#info-button").transition().ease("linear").style("right", "310px");
     d3.select("#info-toggle").html("<span class=\"glyphicon glyphicon-chevron-right\"></span>");
 }
