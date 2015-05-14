@@ -4,15 +4,17 @@ var w = window,
     g = d3.select("body").node(),
     width = g.clientWidth,
     height = w.innerHeight || e.clientHeight || g.clientHeight,
-    parties, entites, receipts, receiptTypes, yearReceipts, clickedNode, infoShown = false, filterShown = false,
-    svg, selectedParties, selectedReceiptTypes, container, nodeElements, linkElements, messageElements,
-    messageG, linksG, nodesG, drawLinks = [], drawNodes = [], nodes = [], selectedYears, nodeIds = {};
+    parties, entites, receipts, receiptTypes, yearReceiptsByParty, yearReceiptsByEntity, clickedNode, 
+    infoShown = false, filterShown = false, svg, selectedParties, selectedReceiptTypes, container, 
+    nodeElements, linkElements, messageG, linksG, nodesG, drawLinks = [], 
+    drawNodes = [], selectedYear;
 
 d3.select("#hover-info").style("display", "none");
 
 var zoom = d3.behavior.zoom()
                .scale(1)
-               .scaleExtent([.2, 1.8])
+               //.translate([width/2, height/2])
+               .scaleExtent([.1, 5])
                .on("zoom", zoomed);
 
 var slider = d3.select("#zoom-controls").select("input")
@@ -25,7 +27,7 @@ var slider = d3.select("#zoom-controls").select("input")
 
 var nodeColors = d3.scale.category20();
 
-var radiusScale = d3.scale.sqrt().range([5, 30]);
+var radiusScale = d3.scale.log().base(100).range([2, 60]);
 
 var resizeWindow = function() {
                        width = g.clientWidth,
@@ -82,12 +84,12 @@ var dollarFormat = d3.format("$,.0f");
 var force = d3.layout.force()
               .size([width, height])
               .charge(function(n) {
-                  return -8 * Math.pow(radiusScale(n.TotalAmount), 2);
+                  return -4 * n.radius;
               })
-              .linkDistance(55)
-              .theta(0.5)
-              .friction(0.75)
-              .gravity(0.3)
+              .linkDistance(50)
+              .theta(.5)
+              .friction(0.7)
+              .gravity(.4)
               .on("tick", tick);
 
 
@@ -136,7 +138,7 @@ function search() {
         if (term.length > 0 && match >= 0) {
             element.style("fill", "#ff1d8e")
                    .style("stroke", "#000");
-            element.transition().attr("r", radiusScale(d.TotalAmount)*2).transition().attr("r", radiusScale(d.TotalAmount));
+            //element.transition().style("fill", "#fff").transition().style("fill", "#ff18de");
             return d.searched = true;
         } else {
             d.searched = false;
@@ -214,6 +216,8 @@ function updateInfoPanel() {
             d.node = clickedNode.entity_nodes[d.key];
         });
 
+        yearTotals = yearReceiptsByParty.filter(function(d) { return d.key == clickedNode.party_id; })[0].values;
+
         html = "<h3><a href=\"http://www.google.com/#q="+ clickedNode.Name + "\" title=\"Search Google for this Party\" target=\"_blank\">" + clickedNode.Name + "</a></h3>\n";
         html += "<hr />\n";
         html += "<h4>Details</h4>\n";
@@ -244,6 +248,8 @@ function updateInfoPanel() {
         top10.forEach(function(d) {
             d.node = clickedNode.party_nodes[d.party];
         });
+
+        yearTotals = yearReceiptsByEntity.filter(function(d) { return d.key == clickedNode.entity_id; })[0].values;
 
         html = "<h3><a href=\"http://www.google.com/#q="+ clickedNode.Name + "\" title=\"Search Google for this Entity\" target=\"_blank\">" + clickedNode.Name + "</a></h3>\n";
         html += "<hr />\n";
@@ -281,54 +287,54 @@ function updateInfoPanel() {
         d3.select("#info-table").select("tbody").selectAll("tr")
             .data(top10)
           .enter().append("tr")
+            .attr("class", "nohover")
             .html(function(d) {
                 return "<td class=\"small\">" + entities[d.key].Name + "</td><td class=\"pull-right small\">" + dollarFormat(d.values) + "</td>";
             });
     }
 
-/*
+    if (clickedNode.Type != "Others") {
+        var margins = { top: 0, right: 0, bottom: 25, left: 50 },
+            chartWidth = 270 - margins.left - margins.right,
+            chartHeight = 120 - margins.top - margins.bottom,
+            years = getYears(),
+            x = d3.scale.ordinal().domain(d3.range(years[0], years[1] +1, 1)).rangeRoundBands([0, chartWidth]),
+            y = d3.scale.linear().domain([0, d3.max(yearTotals, function(d) { return d.values; })]).range([chartHeight, 0]),
+            xAxis = d3.svg.axis()
+                .scale(x)
+                .orient("bottom")
+                .tickValues(x.domain().filter(function(d, i) { return i % 2 == 0; })),
+            yAxis = d3.svg.axis()
+                .scale(y)
+                .orient("left")
+                .ticks(5, "$s"),
+            chart = d3.select("#info-panel").select("svg")
+                        .attr("width", chartWidth + margins.left + margins.right)
+                        .attr("height", chartHeight + margins.top + margins.bottom)
+                      .append("g")
+                        .attr("transform", "translate(" + margins.left + "," + margins.top + ")");
+    
+    
+            chart.append("g")
+                .attr("class", "x axis")
+                .attr("transform", "translate(0," + chartHeight + ")")
+                .call(xAxis);
+    
+            chart.append("g")
+                .attr("class", "y axis")
+                .call(yAxis);
+    
+            chart.selectAll("rect.bar")
+                .data(yearTotals)
+              .enter().append("rect")
+                .attr("class", "bar")
+                .attr("title", function(d) { return d.key + ": " + dollarFormat(d.values); })
+                .attr("x", function(d) { return x(+d.key) + 2; })
+                .attr("y", function(d) { return y(d.values); })
+                .attr("height", function(d) { return chartHeight - y(d.values); })
+                .attr("width", x.rangeBand() - 4);
+    }
 
-    var margins = { top: 0, right: 0, bottom: 25, left: 50 },
-        chartWidth = 270 - margins.left - margins.right,
-        chartHeight = 120 - margins.top - margins.bottom,
-        years = getYears(),
-        x = d3.scale.ordinal().domain(d3.range(years[0], years[1] +1, 1)).rangeRoundBands([0, chartWidth]),
-        y = d3.scale.linear().domain([0, d3.max(yearTotals, function(d) { return d.values; })]).range([chartHeight, 0]),
-        xAxis = d3.svg.axis()
-            .scale(x)
-            .orient("bottom")
-            .tickValues(x.domain().filter(function(d, i) { return i % 2 == 0; })),
-        yAxis = d3.svg.axis()
-            .scale(y)
-            .orient("left")
-            .ticks(5, "$s"),
-        chart = d3.select("#info-panel").select("svg")
-                    .attr("width", chartWidth + margins.left + margins.right)
-                    .attr("height", chartHeight + margins.top + margins.bottom)
-                  .append("g")
-                    .attr("transform", "translate(" + margins.left + "," + margins.top + ")");
-
-
-        chart.append("g")
-            .attr("class", "x axis")
-            .attr("transform", "translate(0," + chartHeight + ")")
-            .call(xAxis);
-
-        chart.append("g")
-            .attr("class", "y axis")
-            .call(yAxis);
-
-        chart.selectAll("rect.bar")
-            .data(yearTotals)
-          .enter().append("rect")
-            .attr("class", "bar")
-            .attr("title", function(d) { return d.key + ": " + dollarFormat(d.values); })
-            .attr("x", function(d) { return x(+d.key) + 1; })
-            .attr("y", function(d) { return y(d.values); })
-            .attr("height", function(d) { return chartHeight - y(d.values); })
-            .attr("width", x.rangeBand() - 4);
-
-*/
     $('.navmenu-fixed-right').offcanvas('show');
     infoShown = true;
     d3.select("#info-button").transition().ease("linear").style("right", "310px");
@@ -429,15 +435,14 @@ function filterAndUpdateData() {
     drawNodes = [];
 
     selectedParties = [];
-    selectedYears = [];
     selectedReceiptTypes = [];
 
-    d3.select("#year_select").selectAll("option").filter(function(d) { return this.selected; }).each(function(d) { selectedYears.push(+this.value); });
     d3.select("#party_select").selectAll("option").filter(function(d) { return this.selected; }).each(function(d) { selectedParties.push(+this.value); });
     d3.select("#receipt_type_select").selectAll("option").filter(function(d) { return this.selected; }).each(function(d) { selectedReceiptTypes.push(+this.value); });
+    selectedYear = d3.select("#year_select").selectAll("option").filter(function(d) { return this.selected; }).node().value;
     var viewSelect = d3.select("#view_select").selectAll("option").filter(function(d) { return this.selected; }).node().value;
 
-    yearReceipts = receipts.filter(function(r) { return selectedYears.indexOf(+r.Year) != -1; });
+    var yearReceipts = receipts.filter(function(r) { return selectedYear == r.Year; });
 
     var allYearParties = d3.set(yearReceipts.map(function(r) { return +r.Party; })).values();
 
@@ -448,6 +453,22 @@ function filterAndUpdateData() {
     if (selectedParties.length == 0) {
         selectedParties = allYearParties;
     }
+
+    yearReceiptsByParty = d3.nest().key(function(d) { return +d.Party; })
+        .key(function(d) { return +d.Year; })
+        .rollup(function(leaves) { return d3.sum(leaves, function(d) { return +d.Amount; }); })
+        .entries(receipts.filter(function(d) {
+            return (selectedReceiptTypes.indexOf(+d.Type) != -1 &&
+                    selectedParties.indexOf(+d.Party) != -1);
+        }));
+
+    yearReceiptsByEntity = d3.nest().key(function(d) { return +d.Entity; })
+        .key(function(d) { return +d.Year; })
+        .rollup(function(leaves) { return d3.sum(leaves, function(d) { return +d.Amount; }); })
+        .entries(receipts.filter(function(d) {
+            return (selectedReceiptTypes.indexOf(+d.Type) != -1 &&
+                    selectedParties.indexOf(+d.Party) != -1);
+        }));
 
     yearReceipts = yearReceipts.filter(function(r) { return (selectedReceiptTypes.indexOf(+r.Type) != -1) && (selectedParties.indexOf(+r.Party) != -1); });
 
@@ -468,8 +489,14 @@ function filterAndUpdateData() {
                       });
                       break;
         case "top-bottom": console.log("top-bottom selected");
-                      break;
-        case "outliers": console.log("outliers selected");
+                      dataEntries.forEach(function(d) {
+                          d.values = d.values.sort(function(a, b) { return a.values - b.values; });
+                          if (d.values.length > 20) {
+                              d.others = d3.sum(d.values.slice(20, -20), function(e) { return e.values; });
+                              d.other_values = d.values.slice(0, -20);
+                              d.values = d.values.slice(-20).concat(d.values.slice(0, 20));
+                          }
+                      });
                       break;
         default: break;
     }
@@ -495,6 +522,7 @@ function filterAndUpdateData() {
         var party_node = {
             Type: 'Party',
             Name: parties[d.key],
+            party_id: d.key,
             links: [],
             entity_nodes: {},
             TotalAmount: 0,
@@ -519,6 +547,7 @@ function filterAndUpdateData() {
                     TotalAmount: 0,
                     receipts: [],
                     party_nodes: {},
+                    entity_id: e.key,
                     id: i++
                 }
                 entity_node.party_nodes[d.key] = party_node;
@@ -585,20 +614,26 @@ function draw() {
                 .attr("y", height/2)
                 .text("No Data Found!")
         linksG.selectAll("line.link").remove();
-        nodesG.selectAll("circle.node").remove();
+        nodesG.selectAll(".node").remove();
         return;
     }
 
     radiusScale.domain(d3.extent(force.nodes(), function(n) { return n.TotalAmount; }));
     nodeColors.domain(force.nodes().map(function(n) { return n.Name; }));
 
-    nodeElements = nodesG.selectAll("circle.node")
+    nodeElements = nodesG.selectAll(".node")
                        .data(force.nodes(), function(d, i) { 
                            return d.Name + "-" + i; 
                        });
 
-    nodeElements.enter().append("circle").attr("class", "node");
-    nodeElements.attr("r", function(n) { return radiusScale(n.TotalAmount); }).attr("id", function(d, i) { return i; })
+    nodeElements.enter().append("path").attr("class", "node");
+    nodeElements.attr("d", d3.svg.symbol()
+                    .size(function(d) { 
+                        d.radius = radiusScale(d.TotalAmount);
+                        d.radius *= d.Type == "Party" ? 5 : 2;
+                        return d.radius
+                    }).type(function(d) { return d.Type == "Party" ? "square" : "circle"; }))
+                .attr("id", function(d, i) { return "node-" + i; })
                 .style("stroke", "#ddd")
                 .style("stroke-width", 1.0)
                 .style("fill", function(d, i) { return nodeColors(d.Name); })
@@ -630,8 +665,9 @@ function tick() {
                 .attr("x2", function(d) { return d.target.x; })
                 .attr("y2", function(d) { return d.target.y; });
 
-    nodeElements.attr("cx", function(d) { return d.x; })
-                .attr("cy", function(d) { return d.y; });
+    nodeElements.attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
+        //.attr("cx", function(d) { return d.x; })
+        //.attr("cy", function(d) { return d.y; });
 }
 
 function processData(error, data) {
@@ -642,7 +678,7 @@ function processData(error, data) {
 
     var years = getYears();
 
-    selectedYears = [years[years.length-1], ];
+    selectedYear = years[years.length-1];
     selectedReceiptTypes = d3.values(receipt_types);
 
     d3.select("#receipt_type_select").selectAll("option")
