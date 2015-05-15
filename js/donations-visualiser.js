@@ -27,7 +27,7 @@ var slider = d3.select("#zoom-controls").select("input")
 
 var nodeColors = d3.scale.category20();
 
-var radiusScale = d3.scale.log().base(100).range([2, 60]);
+var radiusScale = d3.scale.linear().range([10, 60, 65, 250]);
 
 var resizeWindow = function() {
                        width = g.clientWidth,
@@ -618,7 +618,14 @@ function draw() {
         return;
     }
 
-    radiusScale.domain(d3.extent(force.nodes(), function(n) { return n.TotalAmount; }));
+    var extents = d3.extent(force.nodes().filter(function(d) { return d.Type == "Entity"; }), function(n) { return n.TotalAmount; });
+    var start = extents[0],
+        end = extents[1],
+        mean = d3.mean(force.nodes(), function(d) { return d.TotalAmount; }),
+        median = d3.median(force.nodes(), function(d) { return d.TotalAmount; });    
+
+    radiusScale.domain([start, median, mean, end])
+    //radiusScale.domain(extents);
     nodeColors.domain(force.nodes().map(function(n) { return n.Name; }));
 
     nodeElements = nodesG.selectAll(".node")
@@ -630,7 +637,7 @@ function draw() {
     nodeElements.attr("d", d3.svg.symbol()
                     .size(function(d) { 
                         d.radius = radiusScale(d.TotalAmount);
-                        d.radius *= d.Type == "Party" ? 5 : 2;
+                        d.radius *= d.Type == "Party" ? 2.5 : 1;
                         return d.radius
                     }).type(function(d) { return d.Type == "Party" ? "square" : "circle"; }))
                 .attr("id", function(d, i) { return "node-" + i; })
