@@ -3,7 +3,8 @@ var w = window,
     e = d.documentElement,
     g = d3.select("body").node(),
     width = g.clientWidth,
-    height = w.innerHeight || e.clientHeight || g.clientHeight,
+    height = w.innerHeight || e.clientHeight || g.clientHeight, oldYear = 0, firstTime = true,
+    party_nodes = [],
     parties, entites, receipts, receiptTypes, yearReceiptsByParty, yearReceiptsByEntity, clickedNode, 
     infoShown = false, filterShown = false, svg, selectedParties, selectedReceiptTypes, container, 
     nodeElements, linkElements, messageG, linksG, nodesG, drawLinks = [], 
@@ -17,13 +18,17 @@ var zoom = d3.behavior.zoom()
                .scaleExtent([.1, 5])
                .on("zoom", zoomed);
 
-var slider = d3.select("#zoom-controls").select("input")
+var zoom_slider = d3.select("#zoom-controls").select("input")
     .datum({})
     .attr("value", zoom.scale())
     .attr("min", zoom.scaleExtent()[0])
     .attr("max", zoom.scaleExtent()[1])
     .attr("step", .1)
-    .on("input", slided);
+    .on("input", zoom_slided);
+
+var value_slider = d3.select("#value-filter").select("input")
+    .datum({})
+    .on("input", value_filter_slided);
 
 var nodeColors = d3.scale.category20();
 
@@ -72,9 +77,10 @@ $('#info-toggle').on('click', function(d) {
     }
 });
 
-d3.select("#year-select-all").on("click", selectAllYears);
 d3.select("#party-select-all").on("click", selectAllParties);
+d3.select("#party-select-invert").on("click", invertPartiesSelection);
 d3.select("#receipt-type-select-all").on("click", selectAllReceiptTypes);
+d3.select("#receipt-type-select-invert").on("click", invertReceiptTypesSelection);
 d3.select("#clear-search").on("click", clearSearch);
 
 
@@ -97,11 +103,14 @@ d3.json("data/all_data.json", processData);
 
 function zoomed() {
     container.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
-    slider.property("value", d3.event.scale);
+    zoom_slider.property("value", d3.event.scale);
 }
 
-function slided(d) {
+function zoom_slided(d) {
     zoom.scale(d3.select(this).property("value")).event(svg);
+}
+
+function value_filter_slided(d) {
 }
 
 function radius(node) {
@@ -129,6 +138,8 @@ function getYears() {
 function search() {
     var term = d3.select("#search").node().value;
     var searchRegEx = new RegExp(term.toLowerCase());
+
+    if (!nodeElements) return;
 
     nodeElements.each(function(d) {
         var element, match;
@@ -391,35 +402,41 @@ function nodeOut(node, i) {
 }
 
 function selectAllParties(e) {
-    var party_select = d3.select("#party_select").selectAll("option"),
-        selected_parties = d3.select("#party_select").selectAll("option").filter(function(d) { return this.selected; });
+    var party_select = d3.select("#party_select").selectAll("input"),
+        checked = party_select.filter(function(d) { return this.checked; }).size();
 
-    d3.event.preventDefault();
-    if (party_select.size() != selected_parties.size()) {
-        party_select.attr("selected", "selected");
+    if (party_select.size() != checked) {
+        party_select.property("checked", true);
         filterAndUpdateData();
     }
 }
 
-function selectAllYears(e) {
-    var year_select = d3.select("#year_select").selectAll("option"),
-        selected_years = d3.select("#year_select").selectAll("option").filter(function(d) { return this.selected; });
+function invertPartiesSelection(e) {
+    var party_select = d3.select("#party_select").selectAll("input");
 
-    d3.event.preventDefault();
-    if (year_select.size() != selected_years.size()) {
-        year_select.attr("selected", "selected");
-        filterAndUpdateData();
-    }
+    party_select.property("checked", function(d) {
+        return !this.checked;
+    });
+    filterAndUpdateData();
 }
 
 function selectAllReceiptTypes(e) {
-    var receipt_type_select = d3.select("#receipt_type_select").selectAll("option"),
-        selected_receipt_types = d3.select("#receipt_type_select").selectAll("option").filter(function(d) { return this.selected; });
-    d3.event.preventDefault();
-    if (receipt_type_select.size() != selected_receipt_types.size()) {
-        receipt_type_select.attr("selected", "selected");
+    var receipt_type_select = d3.select("#receipt_type_select").selectAll("input"),
+        checked = receipt_type_select.filter(function(d) { return this.checked; }).size();
+
+    if (receipt_type_select.size() != checked) {
+        receipt_type_select.property("checked", true);
         filterAndUpdateData();
     }
+}
+
+function invertReceiptTypesSelection(e) {
+    var receipt_type_select = d3.select("#receipt_type_select").selectAll("input");
+
+    receipt_type_select.property("checked", function(d) {
+        return !this.checked;
+    });
+    filterAndUpdateData();
 }
 
 function clearSearch(e) {
@@ -428,7 +445,10 @@ function clearSearch(e) {
     search();
 }
 
-function filterAndUpdateData() {
+function filterData() {
+}
+
+function filterAndUpdateData(yearChanged) {
     var totals = {};
 
     drawLinks = [];
@@ -437,10 +457,16 @@ function filterAndUpdateData() {
     selectedParties = [];
     selectedReceiptTypes = [];
 
-    d3.select("#party_select").selectAll("option").filter(function(d) { return this.selected; }).each(function(d) { selectedParties.push(+this.value); });
-    d3.select("#receipt_type_select").selectAll("option").filter(function(d) { return this.selected; }).each(function(d) { selectedReceiptTypes.push(+this.value); });
-    selectedYear = d3.select("#year_select").selectAll("option").filter(function(d) { return this.selected; }).node().value;
-    var viewSelect = d3.select("#view_select").selectAll("option").filter(function(d) { return this.selected; }).node().value;
+    d3.select("#party_select").selectAll("input")
+        .filter(function(d) { return this.checked; })
+        .each(function(d) { selectedParties.push(+this.value); });
+
+    d3.select("#receipt_type_select").selectAll("input")
+        .filter(function(d) { return this.checked; })
+        .each(function(d) { selectedReceiptTypes.push(+this.value); });
+
+    selectedYear = d3.select("#year_select").selectAll("option")
+        .filter(function(d) { return this.selected; }).node().value;
 
     var yearReceipts = receipts.filter(function(r) { return selectedYear == r.Year; });
 
@@ -450,8 +476,10 @@ function filterAndUpdateData() {
     allYearParties.forEach(function(d) { return ids[parties[d]] = d; });
     allYearParties = allYearParties.map(function(d) { return parties[d]; }).sort().map(function(d) { return +ids[d]; });
 
-    if (selectedParties.length == 0) {
+
+    if (this.id == "year_select" || firstTime) {
         selectedParties = allYearParties;
+        firstTime = false;
     }
 
     yearReceiptsByParty = d3.nest().key(function(d) { return +d.Party; })
@@ -470,53 +498,42 @@ function filterAndUpdateData() {
                     selectedParties.indexOf(+d.Party) != -1);
         }));
 
-    yearReceipts = yearReceipts.filter(function(r) { return (selectedReceiptTypes.indexOf(+r.Type) != -1) && (selectedParties.indexOf(+r.Party) != -1); });
+    yearReceipts = yearReceipts
+        .filter(function(r) { 
+            return (selectedReceiptTypes.indexOf(+r.Type) != -1) && 
+                   (selectedParties.indexOf(+r.Party) != -1);
+        });
 
     var dataEntries = d3.nest().key(function(d) { return d.Party; })
         .key(function(d) { return d.Entity; })
         .rollup(function(leaves) { return d3.sum(leaves, function(d) { return d.Amount; }); })
         .entries(yearReceipts)
 
-    switch(viewSelect) {
-        case "top20": console.log("top20 selected");
-                      dataEntries.forEach(function(d) {
-                          d.values = d.values.sort(function(a, b) { return a.values - b.values; });
-                          if (d.values.length > 20) {
-                              d.others = d3.sum(d.values.slice(0, -20), function(e) { return e.values; });
-                              d.other_values = d.values.slice(0, -20);
-                              d.values = d.values.slice(-20);
-                          }
-                      });
-                      break;
-        case "top-bottom": console.log("top-bottom selected");
-                      dataEntries.forEach(function(d) {
-                          d.values = d.values.sort(function(a, b) { return a.values - b.values; });
-                          if (d.values.length > 20) {
-                              d.others = d3.sum(d.values.slice(20, -20), function(e) { return e.values; });
-                              d.other_values = d.values.slice(0, -20);
-                              d.values = d.values.slice(-20).concat(d.values.slice(0, 20));
-                          }
-                      });
-                      break;
-        default: break;
-    }
-
     var i = 0, doneEntities = [];
 
-    var party_select = d3.select("#party_select").selectAll("option")
-                             .data(dataEntries.map(function(d) { return d.key; }), function(d) { return parties[d]; });
+    var party_data = allYearParties.map(function(d) { return { id: d, name: parties[d] }; })
+        .sort(function(a, b) { return (a.name < b.name ? -1 : 1); });
 
-    party_select.enter().append("option");
-    party_select.attr("value", function(d) { return d; })
-                .attr("selected", function(d) { return selectedParties.indexOf(+d) != -1 ? "selected" : null; })
-                .text(function(d) { 
-                    if (d == -1) {
-                        return 'All Parties';
-                    } else {
-                        return parties[d]; 
-                    }
-                });
-    party_select.exit().remove();
+    d3.select("#party_select").selectAll("div.checkbox").remove();
+
+    var party_select = d3.select("#party_select").selectAll("div.checkbox")
+                             .data(party_data, function(d) { return d.name; });
+
+    //party_select.enter().append("option");
+    var labels = party_select.enter().append("div")
+        .attr("class", "checkbox")
+        .html(function(d) { 
+            var html = "<label>";
+
+            html += "<input type=\"checkbox\" value=\"" + 
+                d.id + "\"" + (selectedParties.indexOf(+d.id) != -1 ? " checked=\"true\"" : "") + "\">" +
+                d.name + "</label>";
+
+            return html;
+        });
+
+    var min = d3.min(dataEntries, function(d) { return d3.min(d.values, function(e) { return e.values; }); }),
+        max = d3.max(dataEntries, function(d) { return d3.max(d.values, function(e) { return e.values; }); });
 
     dataEntries.forEach(function(d) {
         var party_node = {
@@ -597,7 +614,9 @@ function filterAndUpdateData() {
 
     draw();
     search();
-    updateInfoPanel();
+    if (infoShown) {
+        updateInfoPanel();
+    }
 }
 
 function draw() {
@@ -683,17 +702,66 @@ function processData(error, data) {
     receipts = data.receipts;
     receipt_types = data.receipt_types;
 
+    var entity_map = {};
+
+    parties.forEach(function(d, i) {
+        var node = {};
+        node.name = d;
+        node.receipts = [];
+        node.id = i;
+        node.payers = [];
+
+        party_nodes.push(node);
+    });
+
+    entities.forEach(function(d, i) {
+        var node = {};
+        node.name = d.Name;
+        node.id = i;
+        node.payments = [];
+
+        entity_map[i] = node;
+    });
+
+    receipts_for_parties = {};
+
+    receipts.forEach(function(d, i) {
+        if (d.Party in receipts_for_parties) {
+            receipts_for_parties[d.Party].push(d);
+        } else {
+            receipts_for_parties[d.Party] = [d, ];
+        }
+
+        entity_map[d.Entity].payments.push(d);
+    });
+
+    party_nodes.forEach(function(d) {
+        var added_entities = [];
+        if (d.id in receipts_for_parties) {
+            d.receipts = receipts_for_parties[d.id];
+        }
+
+        d.receipts.forEach(function(e) {
+            if (added_entities.indexOf(e.Entity) == -1) {
+                d.payers.push(entity_map[e.Entity]);
+                added_entities.push(e.Entity);
+            }
+        });
+
+        delete(d.receipts);
+    });
+
     var years = getYears();
 
-    selectedYear = years[years.length-1];
     selectedReceiptTypes = d3.values(receipt_types);
 
     d3.select("#receipt_type_select").selectAll("option")
         .data(d3.keys(receipt_types))
-      .enter().append("option")
-        .attr("value", function(r) { return receipt_types[r]; })
-        .attr("selected", "selected")
-        .text(function(r) { return r; });
+      .enter().append("div")
+        .attr("class", "checkbox")
+        .html(function(d) {
+            return "<label><input type=\"checkbox\" value=\"" + receipt_types[d] + "\" checked=\"true\">" + d + "</label>";
+        });
 
 
     d3.select("#year_select").selectAll("option")
@@ -716,13 +784,13 @@ function processData(error, data) {
     nodesG = container.append("g").attr("width", width).attr("height", height);
     messageG = container.append("g").attr("width", width).attr("height", height);
 
-    filterAndUpdateData();
-
     d3.select("#party_select").on("change", filterAndUpdateData);
     d3.select("#year_select").on("change", filterAndUpdateData);
     d3.select("#receipt_type_select").on("change", filterAndUpdateData);
     d3.select("#view_select").on("change", filterAndUpdateData);
     d3.select("#search").on("keyup", search);
+
+    filterAndUpdateData();
 }
 
 
