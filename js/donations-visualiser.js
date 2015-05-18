@@ -3,12 +3,9 @@ var w = window,
     e = d.documentElement,
     g = d3.select("body").node(),
     width = g.clientWidth,
-    height = w.innerHeight || e.clientHeight || g.clientHeight, oldYear = 0, firstTime = true,
-    party_nodes = [],
-    parties, entites, receipts, receiptTypes, yearReceiptsByParty, yearReceiptsByEntity, clickedNode, 
-    infoShown = false, filterShown = false, svg, selectedParties, selectedReceiptTypes, container, 
-    nodeElements, linkElements, messageG, linksG, nodesG, drawLinks = [], 
-    drawNodes = [], selectedYear;
+    height = w.innerHeight || e.clientHeight || g.clientHeight;
+
+var party_nodes = [], clickedNode = null;
 
 d3.select("#hover-info").style("display", "none");
 
@@ -32,7 +29,7 @@ var value_slider = d3.select("#value-filter").select("input")
 
 var nodeColors = d3.scale.category20();
 
-var radiusScale = d3.scale.linear().range([10, 60, 65, 250]);
+var sizeScale = d3.scale.linear().range([10, 60, 65, 250]);
 
 var resizeWindow = function() {
                        width = g.clientWidth,
@@ -90,11 +87,11 @@ var dollarFormat = d3.format("$,.0f");
 var force = d3.layout.force()
               .size([width, height])
               .charge(function(n) {
-                  return -4 * n.radius;
+                  return -4 * n.size;
               })
               .linkDistance(50)
               .theta(.5)
-              .friction(0.7)
+              .friction(0.2)
               .gravity(.4)
               .on("tick", tick);
 
@@ -113,7 +110,7 @@ function zoom_slided(d) {
 function value_filter_slided(d) {
 }
 
-function radius(node) {
+function size(node) {
     if (node.Type === 'Party') {
         return 10;
     } else {
@@ -177,15 +174,25 @@ function nodeClick(node, i) {
 }
 
 function rowOver(row, i) {
-    row.node.searched = true;
+    node = null;
+    if ('party' in row) {
+        node = row.party;
+    } else {
+        node = row.entity;
+    }
+
+    if (node == null) return;
+
+    node.searched = true;
+
     linkElements.style("stroke", function(l) {
-        if (l.source === row.node || l.target === row.node) {
+        if (l.source === node || l.target === node) {
             return "#555";
         } else {
             return "#ddd";
         }
     }).style("stroke-opacity", function(l) {
-        if (l.source === row.node || l.target === row.node) {
+        if (l.source === node || l.target === node) {
             return 1.0;
         } else {
             return 0.5;
@@ -202,7 +209,17 @@ function rowOver(row, i) {
 }
 
 function rowOut(row, i) {
-    row.node.searched = false;
+    node = null;
+    if ('party' in row) {
+        node = row.party;
+    } else {
+        node = row.entity;
+    }
+
+    if (node == null) return;
+
+    node.searched = false;
+
     linkElements
         .style("stroke", "#ddd")
         .style("stroke-opacity", 0.5);
@@ -218,22 +235,17 @@ function rowOut(row, i) {
 
 function updateInfoPanel() {
     if (clickedNode == null) return;
-    var html;
+    var html, yearTotals = [];
 
     if (clickedNode.Type == "Party") {
-        var top10 = clickedNode.receipts.sort(function(a, b) { return b.values - a.values; }).slice(0, 10);
-        
-        top10.forEach(function(d) {
-            d.node = clickedNode.entity_nodes[d.key];
-        });
+        var top10 = clickedNode.entity_payments.sort(function(a, b) { return b.total - a.total; }).slice(0, 10);
+        yearTotals = d3.nest().key(function(d) { return d.Year; }).rollup(function(leaves) { return d3.sum(leaves, function(e) { return e.Amount; }); }).entries(clickedNode.receipts);
 
-        yearTotals = yearReceiptsByParty.filter(function(d) { return d.key == clickedNode.party_id; })[0].values;
-
-        html = "<h3><a href=\"http://www.google.com/#q="+ clickedNode.Name + "\" title=\"Search Google for this Party\" target=\"_blank\">" + clickedNode.Name + "</a></h3>\n";
+        html = "<h3><a href=\"http://www.google.com/#q="+ clickedNode.name + "\" title=\"Search Google for this Party\" target=\"_blank\">" + clickedNode.name + "</a></h3>\n";
         html += "<hr />\n";
         html += "<h4>Details</h4>\n";
         html += "<p>Type: Party</p>\n";
-        html += "<p>Total Amount Received: " + dollarFormat(clickedNode.TotalAmount) + "</p>";
+        html += "<p>Total Amount Received: " + dollarFormat(clickedNode.total) + "</p>";
         html += "<p>Top " + top10.length + " Payers:</p>\n";
         html += "<table id=\"info-table\" class=\"table table-striped table-condensed table-hover\"><tbody>\n";
         html += "</tbody></table>\n";
@@ -248,25 +260,26 @@ function updateInfoPanel() {
             .on("mouseout", rowOut)
             .on("click", function(row) { 
                 rowOut(row);
-                nodeClick(row.node); 
+                nodeClick(row.entity); 
             })
             .html(function(d) {
-                return "<td class=\"small\">" + entities[d.key].Name + "</td><td class=\"pull-right small\">" + dollarFormat(d.values) + "</td>";
+                return "<td class=\"small\">" + d.entity.name + "</td><td class=\"pull-right small\">" + dollarFormat(d.total) + "</td>";
             });
     } else if (clickedNode.Type == "Entity") {
-        var top10 = clickedNode.receipts.sort(function(a, b) { return b.amount - a.amount; }).slice(0, 10);
-        
-        top10.forEach(function(d) {
-            d.node = clickedNode.party_nodes[d.party];
-        });
+        var top10 = clickedNode.parties.map(function(d) {
+            return {
+                party: d,
+                total: d3.sum(d.entity_payments.filter(function(e) { return e.entity.entity_id == clickedNode.entity_id; }), function(e) { return e.total; })
+            };
+        }).filter(function(d) { return d.total > 0; }).sort(function(a, b) { return b.total - a.total; }).slice(0, 10);
 
-        yearTotals = yearReceiptsByEntity.filter(function(d) { return d.key == clickedNode.entity_id; })[0].values;
+        yearTotals = d3.nest().key(function(d) { return d.Year; }).rollup(function(leaves) { return d3.sum(leaves, function(e) { return e.Amount; }); }).entries(clickedNode.payments);
 
-        html = "<h3><a href=\"http://www.google.com/#q="+ clickedNode.Name + "\" title=\"Search Google for this Entity\" target=\"_blank\">" + clickedNode.Name + "</a></h3>\n";
+        html = "<h3><a href=\"http://www.google.com/#q="+ clickedNode.name + "\" title=\"Search Google for this Entity\" target=\"_blank\">" + clickedNode.name + "</a></h3>\n";
         html += "<hr />\n";
         html += "<h4>Details</h4>\n";
         html += "<p>Type: Payer</p>\n";
-        html += "<p>Total Amount Paid: " + dollarFormat(clickedNode.TotalAmount) + "</p>";
+        html += "<p>Total Amount Paid: " + dollarFormat(clickedNode.total) + "</p>";
         html += "<p>Top " + top10.length + " Receivers:</p>\n";
         html += "<table id=\"info-table\" class=\"table table-striped table-condensed table-hover\"><tbody>\n";
         html += "</tbody></table>\n";
@@ -279,72 +292,54 @@ function updateInfoPanel() {
           .enter().append("tr")
             .on("mouseover", rowOver)
             .on("mouseout", rowOut)
-            .on("click", function(row) { nodeClick(row.node); })
+            .on("click", function(row) { 
+                rowOut(row);
+                nodeClick(row.party); 
+            })
             .html(function(d) {
-                return "<td class=\"small\">" + parties[d.party] + "</td><td class=\"pull-right small\">" + dollarFormat(d.amount) + "</td>";
-            });
-    } else {
-        var top10 = clickedNode.Others.sort(function(a, b) { return b.values - a.values; }).slice(0, 10);
-        html = "<h3>" + clickedNode.Name + "</h3>\n";
-        html += "<hr />\n";
-        html += "<h4>Details</h4>\n";
-        html += "<p>Type: Payers</p>\n";
-        html += "<p>Total Amount Paid: " + dollarFormat(clickedNode.TotalAmount) + "</p>";
-        html += "<p>Top " + top10.length + " Payers:</p>\n";
-        html += "<table id=\"info-table\" class=\"table table-striped table-condensed table-hover\"><tbody>\n";
-        html += "</tbody></table>\n";
-        d3.select("#info-panel").html(html);
-
-        d3.select("#info-table").select("tbody").selectAll("tr")
-            .data(top10)
-          .enter().append("tr")
-            .attr("class", "nohover")
-            .html(function(d) {
-                return "<td class=\"small\">" + entities[d.key].Name + "</td><td class=\"pull-right small\">" + dollarFormat(d.values) + "</td>";
+                return "<td class=\"small\">" + d.party.name + "</td><td class=\"pull-right small\">" + dollarFormat(d.total) + "</td>";
             });
     }
 
-    if (clickedNode.Type != "Others") {
-        var margins = { top: 0, right: 0, bottom: 25, left: 50 },
-            chartWidth = 270 - margins.left - margins.right,
-            chartHeight = 120 - margins.top - margins.bottom,
-            years = getYears(),
-            x = d3.scale.ordinal().domain(d3.range(years[0], years[1] +1, 1)).rangeRoundBands([0, chartWidth]),
-            y = d3.scale.linear().domain([0, d3.max(yearTotals, function(d) { return d.values; })]).range([chartHeight, 0]),
-            xAxis = d3.svg.axis()
-                .scale(x)
-                .orient("bottom")
-                .tickValues(x.domain().filter(function(d, i) { return i % 2 == 0; })),
-            yAxis = d3.svg.axis()
-                .scale(y)
-                .orient("left")
-                .ticks(5, "$s"),
-            chart = d3.select("#info-panel").select("svg")
-                        .attr("width", chartWidth + margins.left + margins.right)
-                        .attr("height", chartHeight + margins.top + margins.bottom)
-                      .append("g")
-                        .attr("transform", "translate(" + margins.left + "," + margins.top + ")");
-    
-    
-            chart.append("g")
-                .attr("class", "x axis")
-                .attr("transform", "translate(0," + chartHeight + ")")
-                .call(xAxis);
-    
-            chart.append("g")
-                .attr("class", "y axis")
-                .call(yAxis);
-    
-            chart.selectAll("rect.bar")
-                .data(yearTotals)
-              .enter().append("rect")
-                .attr("class", "bar")
-                .attr("title", function(d) { return d.key + ": " + dollarFormat(d.values); })
-                .attr("x", function(d) { return x(+d.key) + 2; })
-                .attr("y", function(d) { return y(d.values); })
-                .attr("height", function(d) { return chartHeight - y(d.values); })
-                .attr("width", x.rangeBand() - 4);
-    }
+    var margins = { top: 0, right: 0, bottom: 25, left: 50 },
+        chartWidth = 270 - margins.left - margins.right,
+        chartHeight = 120 - margins.top - margins.bottom,
+        years = getYears(),
+        x = d3.scale.ordinal().domain(d3.range(years[0], years[1] +1, 1)).rangeRoundBands([0, chartWidth]),
+        y = d3.scale.linear().domain([0, d3.max(yearTotals, function(d) { return d.values; })]).range([chartHeight, 0]),
+        xAxis = d3.svg.axis()
+            .scale(x)
+            .orient("bottom")
+            .tickValues(x.domain().filter(function(d, i) { return i % 2 == 0; })),
+        yAxis = d3.svg.axis()
+            .scale(y)
+            .orient("left")
+            .ticks(5, "$s"),
+        chart = d3.select("#info-panel").select("svg")
+                    .attr("width", chartWidth + margins.left + margins.right)
+                    .attr("height", chartHeight + margins.top + margins.bottom)
+                  .append("g")
+                    .attr("transform", "translate(" + margins.left + "," + margins.top + ")");
+
+
+        chart.append("g")
+            .attr("class", "x axis")
+            .attr("transform", "translate(0," + chartHeight + ")")
+            .call(xAxis);
+
+        chart.append("g")
+            .attr("class", "y axis")
+            .call(yAxis);
+
+        chart.selectAll("rect.bar")
+            .data(yearTotals)
+          .enter().append("rect")
+            .attr("class", "bar")
+            .attr("title", function(d) { return d.key + ": " + dollarFormat(d.values); })
+            .attr("x", function(d) { return x(+d.key) + 2; })
+            .attr("y", function(d) { return y(d.values); })
+            .attr("height", function(d) { return chartHeight - y(d.values); })
+            .attr("width", x.rangeBand() - 4);
 
     $('.navmenu-fixed-right').offcanvas('show');
     infoShown = true;
@@ -353,9 +348,9 @@ function updateInfoPanel() {
 }
 
 function nodeOver(node, i) {
-    var hoverInfo = '<p class="text-center">' + node.Name + '</p>';
+    var hoverInfo = '<p class="text-center">' + node.name + '</p>';
         hoverInfo += '<hr class="tooltip-hr">';
-        hoverInfo += '<p class="text-center">' + dollarFormat(node.TotalAmount) + '</p>';
+        hoverInfo += '<p class="text-center">' + dollarFormat(node.total) + '</p>';
 
     d3.select("#hover-info").html(hoverInfo);
     d3.select("#hover-info").style("top", d3.event.y + 15 + "px")
@@ -446,183 +441,63 @@ function clearSearch(e) {
 }
 
 function filterData() {
-}
+    function flattenNodes(roots) {
+        var nodes = [], i = 0;
 
-function filterAndUpdateData(yearChanged) {
-    var totals = {};
-
-    drawLinks = [];
-    drawNodes = [];
-
-    selectedParties = [];
-    selectedReceiptTypes = [];
-
-    d3.select("#party_select").selectAll("input")
-        .filter(function(d) { return this.checked; })
-        .each(function(d) { selectedParties.push(+this.value); });
-
-    d3.select("#receipt_type_select").selectAll("input")
-        .filter(function(d) { return this.checked; })
-        .each(function(d) { selectedReceiptTypes.push(+this.value); });
-
-    selectedYear = d3.select("#year_select").selectAll("option")
-        .filter(function(d) { return this.selected; }).node().value;
-
-    var yearReceipts = receipts.filter(function(r) { return selectedYear == r.Year; });
-
-    var allYearParties = d3.set(yearReceipts.map(function(r) { return +r.Party; })).values();
-
-    var ids = {};
-    allYearParties.forEach(function(d) { return ids[parties[d]] = d; });
-    allYearParties = allYearParties.map(function(d) { return parties[d]; }).sort().map(function(d) { return +ids[d]; });
-
-
-    if (this.id == "year_select" || firstTime) {
-        selectedParties = allYearParties;
-        firstTime = false;
-    }
-
-    yearReceiptsByParty = d3.nest().key(function(d) { return +d.Party; })
-        .key(function(d) { return +d.Year; })
-        .rollup(function(leaves) { return d3.sum(leaves, function(d) { return +d.Amount; }); })
-        .entries(receipts.filter(function(d) {
-            return (selectedReceiptTypes.indexOf(+d.Type) != -1 &&
-                    selectedParties.indexOf(+d.Party) != -1);
-        }));
-
-    yearReceiptsByEntity = d3.nest().key(function(d) { return +d.Entity; })
-        .key(function(d) { return +d.Year; })
-        .rollup(function(leaves) { return d3.sum(leaves, function(d) { return +d.Amount; }); })
-        .entries(receipts.filter(function(d) {
-            return (selectedReceiptTypes.indexOf(+d.Type) != -1 &&
-                    selectedParties.indexOf(+d.Party) != -1);
-        }));
-
-    yearReceipts = yearReceipts
-        .filter(function(r) { 
-            return (selectedReceiptTypes.indexOf(+r.Type) != -1) && 
-                   (selectedParties.indexOf(+r.Party) != -1);
-        });
-
-    var dataEntries = d3.nest().key(function(d) { return d.Party; })
-        .key(function(d) { return d.Entity; })
-        .rollup(function(leaves) { return d3.sum(leaves, function(d) { return d.Amount; }); })
-        .entries(yearReceipts)
-
-    var i = 0, doneEntities = [];
-
-    var party_data = allYearParties.map(function(d) { return { id: d, name: parties[d] }; })
-        .sort(function(a, b) { return (a.name < b.name ? -1 : 1); });
-
-    d3.select("#party_select").selectAll("div.checkbox").remove();
-
-    var party_select = d3.select("#party_select").selectAll("div.checkbox")
-                             .data(party_data, function(d) { return d.name; });
-
-    //party_select.enter().append("option");
-    var labels = party_select.enter().append("div")
-        .attr("class", "checkbox")
-        .html(function(d) { 
-            var html = "<label>";
-
-            html += "<input type=\"checkbox\" value=\"" + 
-                d.id + "\"" + (selectedParties.indexOf(+d.id) != -1 ? " checked=\"true\"" : "") + "\">" +
-                d.name + "</label>";
-
-            return html;
-        });
-
-    var min = d3.min(dataEntries, function(d) { return d3.min(d.values, function(e) { return e.values; }); }),
-        max = d3.max(dataEntries, function(d) { return d3.max(d.values, function(e) { return e.values; }); });
-
-    dataEntries.forEach(function(d) {
-        var party_node = {
-            Type: 'Party',
-            Name: parties[d.key],
-            party_id: d.key,
-            links: [],
-            entity_nodes: {},
-            TotalAmount: 0,
-            receipts: d.values,
-            id: i++,
-        };
-
-        drawNodes.push(party_node);
-
-        d.values.forEach(function(e) {
-            var entity_id = doneEntities.indexOf(e.key);
-            var entity_node;
-
-            if (entity_id != -1) {
-                entity_node = drawNodes.filter(function(f) { return f.Name == entities[e.key].Name && f.Type == 'Entity'; })[0];
-                entity_node.party_nodes[d.key] = party_node;
-            } else {
-                entity_node = {
-                    Type: 'Entity',
-                    Name: entities[e.key].Name,
-                    links: [],
-                    TotalAmount: 0,
-                    receipts: [],
-                    party_nodes: {},
-                    entity_id: e.key,
-                    id: i++
-                }
-                entity_node.party_nodes[d.key] = party_node;
-                drawNodes.push(entity_node);
-                doneEntities.push(e.key);
-            }
-
-            party_node.entity_nodes[e.key] = entity_node;
-
-            entity_node.receipts.push({ party: d.key, amount: e.values });
-
-            var link = {
-                source: entity_node.id,
-                target: party_node.id
-            };
-            
-            party_node.TotalAmount += e.values;
-            entity_node.TotalAmount += e.values;
-
-            party_node.links.push(link);
-            entity_node.links.push(link);
-
-            drawLinks.push(link);
-        });
-
-        if (d.others) {
-            var node = {
-                Type: 'Others',
-                Name: 'Others - Combined Total',
-                TotalAmount: d.others,
-                Others: d.other_values,
-                links: [],
-            };
-
-            var link = {
-                source: i,
-                target: party_node.id
-            };
-            node.links = [link, ];
-            party_node.links.push(link);
-            drawNodes.push(node);
-            drawLinks.push(link);
-            i++;
+        function process(node) {
+            if (node.children) node.children.forEach(process);
+            if (!node.id) node.id = i++;
+            nodes.push(node);
         }
 
+        roots.forEach(process);
+        return nodes;
+    }
+
+
+    var selectedYear = d3.select("#year_select").selectAll("option").filter(function(d) { return this.selected; }).node().value,
+        selectedParties = d3.select("#party_select").selectAll("input").filter(function(d) { return this.checked; })[0].map(function(d) { return +d.value; });
+        selectedReceipts = d3.select("#receipt_type_select").selectAll("input").filter(function(d) { return this.checked; })[0].map(function(d) { return +d.value; });
+
+    var xxx;
+    
+    party_nodes.forEach(function(d) {
+        d.payers.forEach(function(e) {
+            e.filtered_payments = [];
+            e.filtered_payments = e.payments.filter(function(f) { 
+                return f.Year == selectedYear && selectedReceipts.indexOf(f.Type) != -1 && selectedParties.indexOf(f.Party) != 1; 
+            });
+
+            e.total = d3.sum(e.filtered_payments, function(f) { return f.Amount; });
+        });
+
+        d.children = d.payers.filter(function(e) { 
+            return e.filtered_payments.filter(function(f) { 
+                return f.Party == d.party_id; 
+            }).length > 0; 
+        });
+        d.total = d3.sum(d.children, function(e) { 
+            return d3.sum(e.filtered_payments.filter(function(f) { return f.Party == d.party_id; }), function(f) { return f.Amount; }); 
+        });
+        d.entity_payments = d.children.map(function(e) { 
+            return { 
+                entity: e, 
+                total: d3.sum(e.filtered_payments.filter(function(f) { return f.Party == d.party_id; }), function(f) { return f.Amount; }) 
+            };
+        });
     });
 
-    draw();
-    search();
-    if (infoShown) {
-        updateInfoPanel();
-    }
+    var filteredNodes = party_nodes.filter(function(d) { return d.total > 0; });
+
+    var nodes = flattenNodes(filteredNodes);
+    var links = d3.layout.tree().links(nodes);
+
+    update(nodes, links);
 }
 
-function draw() {
+function update(nodes, links) {
     force.stop();
-    force.nodes(drawNodes)
-         .links(drawLinks);
+    force.nodes(nodes).links(links);
 
     messageG.selectAll("text").remove();
 
@@ -637,43 +512,46 @@ function draw() {
         return;
     }
 
-    var extents = d3.extent(force.nodes().filter(function(d) { return d.Type == "Entity"; }), function(n) { return n.TotalAmount; });
+    var entity_nodes = nodes.filter(function(d) { return d.Type == "Entity"; });
+
+    var extents = d3.extent(entity_nodes, function(n) { return n.total; });
     var start = extents[0],
         end = extents[1],
-        mean = d3.mean(force.nodes(), function(d) { return d.TotalAmount; }),
-        median = d3.median(force.nodes(), function(d) { return d.TotalAmount; });    
+        mean = d3.mean(entity_nodes, function(d) { return d.total; }),
+        median = d3.median(entity_nodes, function(d) { return d.total; });    
 
-    radiusScale.domain([start, median, mean, end])
-    //radiusScale.domain(extents);
-    nodeColors.domain(force.nodes().map(function(n) { return n.Name; }));
+    sizeScale.domain([start, median, mean, end])
+    nodeColors.domain(force.nodes().map(function(n) { return n.name; }));
 
     nodeElements = nodesG.selectAll(".node")
                        .data(force.nodes(), function(d, i) { 
-                           return d.Name + "-" + i; 
+                           return d.name + "-" + i; 
                        });
 
     nodeElements.enter().append("path").attr("class", "node");
     nodeElements.attr("d", d3.svg.symbol()
                     .size(function(d) { 
-                        d.radius = radiusScale(d.TotalAmount);
-                        d.radius *= d.Type == "Party" ? 2.5 : 1;
-                        return d.radius
-                    }).type(function(d) { return d.Type == "Party" ? "square" : "circle"; }))
+                        d.size = sizeScale(d.total);
+                        d.size *= d.Type == "Party" ? 2.5 : 1;
+                        return d.size
+                    }).type(function(d) { 
+                        return d.Type == "Party" ? "square" : "circle"; 
+                    }))
                 .attr("id", function(d, i) { return "node-" + i; })
                 .style("stroke", "#ddd")
                 .style("stroke-width", 1.0)
-                .style("fill", function(d, i) { return nodeColors(d.Name); })
+                .style("fill", function(d, i) { return nodeColors(d.name); })
                 .on("mouseover", nodeOver)
                 .on("click", nodeClick)
                 .on("mouseout", nodeOut);
     nodeElements.exit().remove();
     nodeElements.attr("title", function(n) { 
-        return n.Name; 
+        return n.name; 
     });
 
 
     linkElements = linksG.selectAll("line.link")
-                       .data(force.links(), function(d) { return d.source + "-" + d.target; })
+                       .data(force.links(), function(d) { return d.source.id + "-" + d.target.id; })
 
     linkElements.enter().append("line").attr("class", "link")
                                        .style("stroke", "#ddd")
@@ -682,7 +560,6 @@ function draw() {
     linkElements.exit().remove();
 
     force.start();
-
 }
 
 function tick() {
@@ -702,23 +579,28 @@ function processData(error, data) {
     receipts = data.receipts;
     receipt_types = data.receipt_types;
 
-    var entity_map = {};
+    var entity_map = {}, party_map = {};
 
     parties.forEach(function(d, i) {
         var node = {};
+        node.Type = "Party";
         node.name = d;
         node.receipts = [];
-        node.id = i;
+        node.party_id = i;
         node.payers = [];
+
+        party_map[i] = node;
 
         party_nodes.push(node);
     });
 
     entities.forEach(function(d, i) {
         var node = {};
+        node.Type = "Entity";
         node.name = d.Name;
-        node.id = i;
+        node.entity_id = i;
         node.payments = [];
+        node.parties = [];
 
         entity_map[i] = node;
     });
@@ -726,6 +608,8 @@ function processData(error, data) {
     receipts_for_parties = {};
 
     receipts.forEach(function(d, i) {
+        d.party = party_map[d.Party];
+        d.entity = entity_map[d.Entity];
         if (d.Party in receipts_for_parties) {
             receipts_for_parties[d.Party].push(d);
         } else {
@@ -737,18 +621,17 @@ function processData(error, data) {
 
     party_nodes.forEach(function(d) {
         var added_entities = [];
-        if (d.id in receipts_for_parties) {
-            d.receipts = receipts_for_parties[d.id];
+        if (d.party_id in receipts_for_parties) {
+            d.receipts = receipts_for_parties[d.party_id];
         }
 
         d.receipts.forEach(function(e) {
             if (added_entities.indexOf(e.Entity) == -1) {
                 d.payers.push(entity_map[e.Entity]);
                 added_entities.push(e.Entity);
+                entity_map[e.Entity].parties.push(d);
             }
         });
-
-        delete(d.receipts);
     });
 
     var years = getYears();
@@ -784,13 +667,13 @@ function processData(error, data) {
     nodesG = container.append("g").attr("width", width).attr("height", height);
     messageG = container.append("g").attr("width", width).attr("height", height);
 
-    d3.select("#party_select").on("change", filterAndUpdateData);
-    d3.select("#year_select").on("change", filterAndUpdateData);
-    d3.select("#receipt_type_select").on("change", filterAndUpdateData);
-    d3.select("#view_select").on("change", filterAndUpdateData);
+    d3.select("#party_select").on("change", filterData);
+    d3.select("#year_select").on("change", filterData);
+    d3.select("#receipt_type_select").on("change", filterData);
+    d3.select("#view_select").on("change", filterData);
     d3.select("#search").on("keyup", search);
 
-    filterAndUpdateData();
+    filterData();
 }
 
 
