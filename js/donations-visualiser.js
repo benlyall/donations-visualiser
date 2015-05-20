@@ -5,7 +5,8 @@ var w = window,
     width = g.clientWidth,
     height = w.innerHeight || e.clientHeight || g.clientHeight;
 
-var party_nodes = [], party_map = {}, parties_for_year = {}, clickedNode = null, filterShown = false, infoShown = false, oldYear = -1;
+var party_map = {}, entity_map = {}, years = [], receipt_types, 
+    clickedNode = null, filterShown = false, infoShown = false, oldYear = -1;
 
 var coalition_positions = [];
 
@@ -31,7 +32,7 @@ var value_slider = d3.select("#value-filter").select("input")
 
 var nodeColors = d3.scale.category20();
 
-var sizeScale = d3.scale.linear().range([3, 10, 20, 30]);
+var sizeScale = d3.scale.linear().range([10, 60, 65, 250]);
 
 var resizeWindow = function() {
                        width = g.clientWidth,
@@ -86,12 +87,11 @@ var dollarFormat = d3.format("$,.0f");
 
 var force = d3.layout.force()
               .size([width, height])
-              .charge(function(n) { return -10 * n.size; })
-              .linkDistance(30)
-              //.linkStrength(.5)
-              .theta(.2)
-              .friction(0.2)
-              .gravity(0.8)
+              .charge(function(n) { return -4 * n.size; })
+              .linkDistance(50)
+              .theta(.5)
+              .friction(0.7)
+              .gravity(0.4)
               .on("tick", tick);
 
 
@@ -107,19 +107,6 @@ function zoom_slided(d) {
 }
 
 function value_filter_slided(d) {
-}
-
-function getYears() {
-    var minYear = Infinity, maxYear = -Infinity;
-    receipts.forEach(function(r) {
-        if (+r.Year < minYear) {
-            minYear = +r.Year;
-        } else if (+r.Year > maxYear) {
-            maxYear = +r.Year;
-        }
-    });
-
-    return [minYear, maxYear];
 }
 
 function search() {
@@ -228,7 +215,7 @@ function updateInfoPanel() {
     var html, yearTotals = [];
 
     if (clickedNode.Type == "Party") {
-        var top10 = clickedNode.entity_payments.sort(function(a, b) { return b.total - a.total; }).slice(0, 10);
+        var top10 = clickedNode.entityTotals.sort(function(a, b) { return b.values - a.values; }).slice(0, 10);
         yearTotals = d3.nest().key(function(d) { return d.Year; }).rollup(function(leaves) { return d3.sum(leaves, function(e) { return e.Amount; }); }).entries(clickedNode.receipts);
 
         html = "<h3><a href=\"http://www.google.com/#q="+ clickedNode.name + "\" title=\"Search Google for this Party\" target=\"_blank\">" + clickedNode.name + "</a></h3>\n";
@@ -253,16 +240,10 @@ function updateInfoPanel() {
                 nodeClick(row.entity); 
             })
             .html(function(d) {
-                return "<td class=\"small\">" + d.entity.name + "</td><td class=\"pull-right small\">" + dollarFormat(d.total) + "</td>";
+                return "<td class=\"small\">" + entity_map[d.key].name + "</td><td class=\"pull-right small\">" + dollarFormat(d.values) + "</td>";
             });
     } else if (clickedNode.Type == "Entity") {
-        var top10 = clickedNode.parties.map(function(d) {
-            return {
-                party: d,
-                total: d3.sum(d.entity_payments.filter(function(e) { return e.entity.entity_id == clickedNode.entity_id; }), function(e) { return e.total; })
-            };
-        }).filter(function(d) { return d.total > 0; }).sort(function(a, b) { return b.total - a.total; }).slice(0, 10);
-
+        var top10 = clickedNode.partyTotals.sort(function(a, b) { return b.values - a.values; }).slice(0, 10);
         yearTotals = d3.nest().key(function(d) { return d.Year; }).rollup(function(leaves) { return d3.sum(leaves, function(e) { return e.Amount; }); }).entries(clickedNode.payments);
 
         html = "<h3><a href=\"http://www.google.com/#q="+ clickedNode.name + "\" title=\"Search Google for this Entity\" target=\"_blank\">" + clickedNode.name + "</a></h3>\n";
@@ -287,14 +268,13 @@ function updateInfoPanel() {
                 nodeClick(row.party); 
             })
             .html(function(d) {
-                return "<td class=\"small\">" + d.party.name + "</td><td class=\"pull-right small\">" + dollarFormat(d.total) + "</td>";
+                return "<td class=\"small\">" + party_map[d.key].name + "</td><td class=\"pull-right small\">" + dollarFormat(d.values) + "</td>";
             });
     }
 
     var margins = { top: 0, right: 0, bottom: 25, left: 50 },
         chartWidth = 270 - margins.left - margins.right,
         chartHeight = 120 - margins.top - margins.bottom,
-        years = getYears(),
         x = d3.scale.ordinal().domain(d3.range(years[0], years[1] +1, 1)).rangeRoundBands([0, chartWidth]),
         y = d3.scale.linear().domain([0, d3.max(yearTotals, function(d) { return d.values; })]).range([chartHeight, 0]),
         xAxis = d3.svg.axis()
@@ -392,7 +372,7 @@ function selectAllParties(e) {
 
     if (party_select.size() != checked) {
         party_select.property("checked", true);
-        filterAndUpdateData();
+        filterData();
     }
 }
 
@@ -402,7 +382,7 @@ function invertPartiesSelection(e) {
     party_select.property("checked", function(d) {
         return !this.checked;
     });
-    filterAndUpdateData();
+    filterData();
 }
 
 function selectAllReceiptTypes(e) {
@@ -411,7 +391,7 @@ function selectAllReceiptTypes(e) {
 
     if (receipt_type_select.size() != checked) {
         receipt_type_select.property("checked", true);
-        filterAndUpdateData();
+        filterData();
     }
 }
 
@@ -421,7 +401,7 @@ function invertReceiptTypesSelection(e) {
     receipt_type_select.property("checked", function(d) {
         return !this.checked;
     });
-    filterAndUpdateData();
+    filterData();
 }
 
 function clearSearch(e) {
@@ -431,51 +411,64 @@ function clearSearch(e) {
 }
 
 function filterData() {
-    var selectedYear = d3.select("#year_select").selectAll("option").filter(function(d) { return this.selected; }).node().value,
-        selectedParties = d3.select("#party_select").selectAll("input")
-            .filter(function(d) { return this.checked; })[0]
-            .map(function(d) { return +d.value; })
-                .map(function(d) { return party_map[d]; });
-        selectedReceipts = d3.select("#receipt_type_select").selectAll("input").filter(function(d) { return this.checked; })[0].map(function(d) { return +d.value; });
+    var selectedYear = +d3.select("#year_select").selectAll("option").filter(function(d) { return this.selected; }).node().value,
+        selectedParties = d3.select("#party_select").selectAll("input") .filter(function(d) { return this.checked; })[0] .map(function(d) { return +d.value; }),
+        selectedReceiptTypes = d3.select("#receipt_type_select").selectAll("input").filter(function(d) { return this.checked; })[0].map(function(d) { return +d.value; });
 
-    if (oldYear != selectedYear) {
-        selectedParties = parties_for_year[selectedYear];
-        oldYear = selectedYear;
-    }
+    var filteredNodes = [];
 
-    party_nodes.forEach(function(d) {
-        d.payers.forEach(function(e) {
-            e.filtered_payments = [];
-            e.filtered_payments = e.payments.filter(function(f) { 
-                return (f.Year == selectedYear && selectedReceipts.indexOf(f.Type) != -1 && selectedParties.indexOf(party_map[f.Party]) != -1); 
-            });
-
-            e.total = d3.sum(e.filtered_payments, function(f) { return f.Amount; });
-        });
-
-        d.children = d.payers.filter(function(e) { 
-            return e.filtered_payments.filter(function(f) { 
-                return f.Party == d.party_id; 
-            }).length > 0; 
-        });
-        d.total = d3.sum(d.children, function(e) { 
-            return d3.sum(e.filtered_payments.filter(function(f) { return f.Party == d.party_id; }), function(f) { return f.Amount; }); 
-        });
-        d.entity_payments = d.children.map(function(e) { 
-            return { 
-                entity: e, 
-                total: d3.sum(e.filtered_payments.filter(function(f) { return f.Party == d.party_id; }), function(f) { return f.Amount; }) 
-            };
-        });
+    d3.keys(party_map).forEach(function(k) {
+        node = party_map[k];
+        node.filteredReceipts = node.receipts.filter(function(d) { return (+d.Year == +selectedYear && selectedReceiptTypes.indexOf(d.Type) != -1); });
+        if (node.filteredReceipts.length > 0) {
+            node.total = d3.sum(node.filteredReceipts, function(d) { return d.Amount; });
+            node.children = [];
+            node.entityTotals = d3.nest()
+                .key(function(d) { return d.Entity; })
+                .rollup(function(leaves) { return d3.sum(leaves, function(e) { return e.Amount; }); })
+                .entries(node.filteredReceipts);
+            
+            filteredNodes.push(node);
+        }
     });
 
-    var filteredNodes = party_nodes.filter(function(d) { return d.total > 0; });
+    allParties = filteredNodes.map(function(d) { return d.party_id; });
 
-    update(filteredNodes, selectedParties);
+    if (oldYear == selectedYear) {
+        filteredNodes = filteredNodes.filter(function(d) { return selectedParties.indexOf(d.party_id) != -1; });
+    } else {
+        oldYear = selectedYear;
+        selectedParties = allParties;
+    }
+
+    d3.keys(entity_map).forEach(function(k) {
+        node = entity_map[k];
+        node.filteredPayments = node.payments.filter(function(d) { 
+            return (+d.Year == +selectedYear && 
+                    selectedReceiptTypes.indexOf(d.Type) != -1 &&
+                    selectedParties.indexOf(d.Party) != -1);
+        });
+
+        if (node.filteredPayments.length > 0) {
+            node.total = d3.sum(node.filteredPayments, function(d) { return d.Amount; });
+            node.partyTotals = d3.nest()
+                .key(function(d) { return d.Party; })
+                .rollup(function(leaves) { return d3.sum(leaves, function(e) { return e.Amount; }); })
+                .entries(node.filteredPayments);
+    
+            node.partyTotals.forEach(function(p) {
+                party_map[p.key].children.push(node);
+            });
+        }
+    });
+
+    update(filteredNodes, allParties);
 }
 
-function update(party_nodes, parties) {
+function update(partyNodes, parties) {
     force.stop();
+
+    var selectedParties = partyNodes.map(function(d) { return d.party_id; });
 
     function flattenNodes(roots) {
         var nodes = [], i = 0;
@@ -499,7 +492,7 @@ function update(party_nodes, parties) {
         return nodes;
     }
 
-    var nodes = flattenNodes(party_nodes),
+    var nodes = flattenNodes(partyNodes),
         links = d3.layout.tree().links(nodes);
 
     force.nodes(nodes).links(links);
@@ -507,11 +500,11 @@ function update(party_nodes, parties) {
     d3.select("#party_select").selectAll(".checkbox").remove();
 
     party_checkboxes = d3.select("#party_select").selectAll(".checkbox")
-        .data(party_nodes, function(d) { return d.name; })
+        .data(parties.sort(function(a, b) { return (party_map[a].name < party_map[b].name ? -1 : 1); }), function(d) { return d; })
       .enter().append("div")
         .attr("class", "checkbox")
         .html(function(d) {
-            return "<label><input type=\"checkbox\" value=\"" + d.party_id + "\"" +  (parties.indexOf(d.party_id) != -1 ? " checked=\"checked\"" : "") + ">" + d.name + "</label>";
+            return "<label><input type=\"checkbox\" value=\"" + d + "\"" +  (selectedParties.indexOf(d) != -1 ? " checked=\"checked\"" : "") + ">" + party_map[d].name + "</label>";
         });
 
     messageG.selectAll("text").remove();
@@ -545,7 +538,10 @@ function update(party_nodes, parties) {
 
     nodeElements.enter().append("path").attr("class", "node")
         .attr("d", d3.svg.symbol()
-                     .size(function(d) { d.size = (d.Type == "Party" ? 2 : 1) * Math.pow(sizeScale(d.total), 2); return d.size; })
+                     .size(function(d) { 
+                         d.size = sizeScale(d.total); 
+                         if (d.Type == 'Party') d.size *= 2.5;
+                         return d.size; })
                      .type(function(d) { return (d.Type == "Party" ? "square" : "circle"); }))
     nodeElements.attr("id", function(d, i) { return "node-" + i; })
                 .style("stroke", "#ddd")
@@ -584,14 +580,9 @@ function tick() {
 }
 
 function processData(error, data) {
-    parties = data.parties;
-    entities = data.entities;
-    receipts = data.receipts;
-    receipt_types = data.receipt_types;
+    receipt_types = d3.entries(data.receipt_types).sort(function(a, b) { return (a.value < b.value) ? -1 : 1; }).map(function(d) { return d.key; })
 
-    var entity_map = {};
-
-    parties.forEach(function(d, i) {
+    data.parties.forEach(function(d, i) {
         var node = {};
         node.Type = "Party";
         node.name = d;
@@ -600,11 +591,9 @@ function processData(error, data) {
         node.payers = [];
 
         party_map[i] = node;
-
-        party_nodes.push(node);
     });
 
-    entities.forEach(function(d, i) {
+    data.entities.forEach(function(d, i) {
         var node = {};
         node.Type = "Entity";
         node.name = d.Name;
@@ -615,53 +604,36 @@ function processData(error, data) {
         entity_map[i] = node;
     });
 
-    var receipts_for_parties = {};
-
-    receipts.forEach(function(d, i) {
+    data.receipts.forEach(function(d, i) {
         d.party = party_map[d.Party];
         d.entity = entity_map[d.Entity];
-        if (d.Party in receipts_for_parties) {
-            receipts_for_parties[d.Party].push(d);
-        } else {
-            receipts_for_parties[d.Party] = [d, ];
-        }
+        d.receipt_type = receipt_types[d.Type];
 
+        party_map[d.Party].receipts.push(d);
         entity_map[d.Entity].payments.push(d);
-
-        if (d.Year in parties_for_year) {
-            if (parties_for_year[d.Year].filter(function(e) { return e.party_id == d.Party; }).length == 0) {
-                parties_for_year[d.Year].push(party_map[d.Party]);
-            }
-        } else {
-            parties_for_year[d.Year] = [party_map[d.Party], ];
-        }
     });
 
-    party_nodes.forEach(function(d) {
-        var added_entities = [];
-        if (d.party_id in receipts_for_parties) {
-            d.receipts = receipts_for_parties[d.party_id];
-        }
+    var yearTotalsReceiptType = d3.nest()
+        .key(function(d) { return d.Year; })
+        .key(function(d) { return d.receipt_type; })
+        .rollup(function(leaves) { return d3.sum(leaves, function(d) { return d.Amount; }); });
 
-        d.receipts.forEach(function(e) {
-            if (added_entities.indexOf(e.Entity) == -1) {
-                d.payers.push(entity_map[e.Entity]);
-                added_entities.push(e.Entity);
-                entity_map[e.Entity].parties.push(d);
-            }
-        });
+    d3.keys(party_map).forEach(function(k) {
+        party_map[k].yearTotals = yearTotalsReceiptType.entries(party_map[k].receipts);
     });
 
-    var years = getYears();
+    d3.keys(entity_map).forEach(function(k) {
+        entity_map[k].yearTotals = yearTotalsReceiptType.entries(entity_map[k].payments);
+    });
 
-    selectedReceiptTypes = d3.values(receipt_types);
+    years = d3.extent(data.receipts, function(d) { return +d.Year; });
 
     d3.select("#receipt_type_select").selectAll("option")
-        .data(d3.keys(receipt_types))
+        .data(receipt_types)
       .enter().append("div")
         .attr("class", "checkbox")
-        .html(function(d) {
-            return "<label><input type=\"checkbox\" value=\"" + receipt_types[d] + "\" checked=\"true\">" + d + "</label>";
+        .html(function(d, i) {
+            return "<label><input type=\"checkbox\" value=\"" + i + "\" checked=\"true\">" + d + "</label>";
         });
 
     d3.select("#year_select").selectAll("option")
