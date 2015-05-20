@@ -118,16 +118,20 @@ function search() {
     nodeElements.each(function(d) {
         var element, match;
         element = d3.select(this);
-        match = d.Name.toLowerCase().search(searchRegEx);
+        match = d.name.toLowerCase().search(searchRegEx);
 
         if (term.length > 0 && match >= 0) {
             element.style("fill", "#ff1d8e")
                    .style("stroke", "#000");
             //element.transition().style("fill", "#fff").transition().style("fill", "#ff18de");
             return d.searched = true;
+        } else if (term.length > 0) {
+            d.searched = false;
+            return element.style("fill", "grey")
+                          .style("stroke", "#ddd");
         } else {
             d.searched = false;
-            return element.style("fill", function(d, i) { return nodeColors(d.Name); })
+            return element.style("fill", function(d, i) { return nodeColors(d.name); })
                           .style("stroke", "#ddd");
         }
     });
@@ -152,10 +156,10 @@ function nodeClick(node, i) {
 
 function rowOver(row, i) {
     node = null;
-    if ('party' in row) {
-        node = row.party;
+    if (row.values.type == 'Party') {
+        node = party_map[row.key];
     } else {
-        node = row.entity;
+        node = entity_map[row.key];
     }
 
     if (node == null) return;
@@ -187,10 +191,10 @@ function rowOver(row, i) {
 
 function rowOut(row, i) {
     node = null;
-    if ('party' in row) {
-        node = row.party;
+    if (row.values.type == 'Party') {
+        node = party_map[row.key];
     } else {
-        node = row.entity;
+        node = entity_map[row.key];
     }
 
     if (node == null) return;
@@ -215,7 +219,7 @@ function updateInfoPanel() {
     var html, yearTotals = [];
 
     if (clickedNode.Type == "Party") {
-        var top10 = clickedNode.entityTotals.sort(function(a, b) { return b.values - a.values; }).slice(0, 10);
+        var top10 = clickedNode.entityTotals.sort(function(a, b) { return b.values.total - a.values.total; }).slice(0, 10);
         yearTotals = d3.nest().key(function(d) { return d.Year; }).rollup(function(leaves) { return d3.sum(leaves, function(e) { return e.Amount; }); }).entries(clickedNode.receipts);
 
         html = "<h3><a href=\"http://www.google.com/#q="+ clickedNode.name + "\" title=\"Search Google for this Party\" target=\"_blank\">" + clickedNode.name + "</a></h3>\n";
@@ -237,13 +241,13 @@ function updateInfoPanel() {
             .on("mouseout", rowOut)
             .on("click", function(row) { 
                 rowOut(row);
-                nodeClick(row.entity); 
+                nodeClick(entity_map[row.key]); 
             })
             .html(function(d) {
-                return "<td class=\"small\">" + entity_map[d.key].name + "</td><td class=\"pull-right small\">" + dollarFormat(d.values) + "</td>";
+                return "<td class=\"small\">" + entity_map[d.key].name + "</td><td class=\"pull-right small\">" + dollarFormat(d.values.total) + "</td>";
             });
     } else if (clickedNode.Type == "Entity") {
-        var top10 = clickedNode.partyTotals.sort(function(a, b) { return b.values - a.values; }).slice(0, 10);
+        var top10 = clickedNode.partyTotals.sort(function(a, b) { return b.values.total - a.values.total; }).slice(0, 10);
         yearTotals = d3.nest().key(function(d) { return d.Year; }).rollup(function(leaves) { return d3.sum(leaves, function(e) { return e.Amount; }); }).entries(clickedNode.payments);
 
         html = "<h3><a href=\"http://www.google.com/#q="+ clickedNode.name + "\" title=\"Search Google for this Entity\" target=\"_blank\">" + clickedNode.name + "</a></h3>\n";
@@ -265,10 +269,10 @@ function updateInfoPanel() {
             .on("mouseout", rowOut)
             .on("click", function(row) { 
                 rowOut(row);
-                nodeClick(row.party); 
+                nodeClick(party_map[row.key]); 
             })
             .html(function(d) {
-                return "<td class=\"small\">" + party_map[d.key].name + "</td><td class=\"pull-right small\">" + dollarFormat(d.values) + "</td>";
+                return "<td class=\"small\">" + party_map[d.key].name + "</td><td class=\"pull-right small\">" + dollarFormat(d.values.total) + "</td>";
             });
     }
 
@@ -412,27 +416,34 @@ function clearSearch(e) {
 
 function filterData() {
     var selectedYear = +d3.select("#year_select").selectAll("option").filter(function(d) { return this.selected; }).node().value,
-        selectedParties = d3.select("#party_select").selectAll("input") .filter(function(d) { return this.checked; })[0] .map(function(d) { return +d.value; }),
+        allParties = d3.select("#party_select").selectAll("input").map(function(d) { return +d.value; }),
+        selectedParties = d3.select("#party_select").selectAll("input").filter(function(d) { return this.checked; })[0] .map(function(d) { return +d.value; }),
         selectedReceiptTypes = d3.select("#receipt_type_select").selectAll("input").filter(function(d) { return this.checked; })[0].map(function(d) { return +d.value; });
 
-    var filteredNodes = [];
+    var filteredNodes = [], allParties = [];
 
     d3.keys(party_map).forEach(function(k) {
         node = party_map[k];
-        node.filteredReceipts = node.receipts.filter(function(d) { return (+d.Year == +selectedYear && selectedReceiptTypes.indexOf(d.Type) != -1); });
+
+        node.yearReceipts = node.receipts.filter(function(d) { return (+d.Year == +selectedYear); });
+        node.filteredReceipts = node.yearReceipts.filter(function(d) { 
+            allParties.push(+k);
+            return (selectedReceiptTypes.indexOf(d.Type) != -1); 
+        });
+
         if (node.filteredReceipts.length > 0) {
             node.total = d3.sum(node.filteredReceipts, function(d) { return d.Amount; });
             node.children = [];
             node.entityTotals = d3.nest()
                 .key(function(d) { return d.Entity; })
-                .rollup(function(leaves) { return d3.sum(leaves, function(e) { return e.Amount; }); })
+                .rollup(function(leaves) { return { type: 'Entity', total: d3.sum(leaves, function(e) { return e.Amount; }) }; })
                 .entries(node.filteredReceipts);
             
             filteredNodes.push(node);
         }
     });
 
-    allParties = filteredNodes.map(function(d) { return d.party_id; });
+    allParties = d3.set(allParties).values().map(function(d) { return +d; });
 
     if (oldYear == selectedYear) {
         filteredNodes = filteredNodes.filter(function(d) { return selectedParties.indexOf(d.party_id) != -1; });
@@ -453,7 +464,7 @@ function filterData() {
             node.total = d3.sum(node.filteredPayments, function(d) { return d.Amount; });
             node.partyTotals = d3.nest()
                 .key(function(d) { return d.Party; })
-                .rollup(function(leaves) { return d3.sum(leaves, function(e) { return e.Amount; }); })
+                .rollup(function(leaves) { return { type: 'Party', total: d3.sum(leaves, function(e) { return e.Amount; }) }; })
                 .entries(node.filteredPayments);
     
             node.partyTotals.forEach(function(p) {
@@ -462,13 +473,11 @@ function filterData() {
         }
     });
 
-    update(filteredNodes, allParties);
+    update(filteredNodes, allParties, selectedParties);
 }
 
-function update(partyNodes, parties) {
+function update(partyNodes, parties, selectedParties) {
     force.stop();
-
-    var selectedParties = partyNodes.map(function(d) { return d.party_id; });
 
     function flattenNodes(roots) {
         var nodes = [], i = 0;
@@ -529,7 +538,6 @@ function update(partyNodes, parties) {
         median = d3.median(entity_nodes, function(d) { return d.total; });    
 
     sizeScale.domain([start, median, mean, end])
-    nodeColors.domain(force.nodes().map(function(n) { return n.name; }));
 
     nodeElements = nodesG.selectAll(".node")
                        .data(force.nodes(), function(d, i) { 
@@ -603,6 +611,10 @@ function processData(error, data) {
 
         entity_map[i] = node;
     });
+
+    names = data.parties;
+    names.concat(data.entities.map(function(d) { return d.Name; }));
+    nodeColors.domain(names);
 
     data.receipts.forEach(function(d, i) {
         d.party = party_map[d.Party];
