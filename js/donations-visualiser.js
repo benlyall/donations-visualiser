@@ -8,7 +8,7 @@ var w = window,
 var party_map = {}, entity_map = {}, years = [], receipt_types, 
     clickedNode = null, filterShown = false, infoShown = false, oldYear = -1;
 
-var coalition_positions = [];
+var svg = d3.select("div#vis").append("svg").attr("width", width).attr("height", height);
 
 d3.select("#hover-info").style("display", "none");
 
@@ -26,9 +26,7 @@ var zoom_slider = d3.select("#zoom-controls").select("input")
     .attr("step", .1)
     .on("input", zoom_slided);
 
-var value_slider = d3.select("#value-filter").select("input")
-    .datum({})
-    .on("input", value_filter_slided);
+var value_slider = d3.slider().axis(true).on("slide", updateLabels).on("slideend", filterData).step(1000);
 
 var nodeColors = d3.scale.category20();
 
@@ -104,9 +102,6 @@ function zoomed() {
 
 function zoom_slided(d) {
     zoom.scale(d3.select(this).property("value")).event(svg);
-}
-
-function value_filter_slided(d) {
 }
 
 function search() {
@@ -231,7 +226,7 @@ function updateInfoPanel() {
         html += "<table id=\"info-table\" class=\"table table-striped table-condensed table-hover\"><tbody>\n";
         html += "</tbody></table>\n";
         html += "<h4>Total Amounts Received</h4>\n";
-        html += "<svg></svg";
+        html += "<svg></svg>";
         d3.select("#info-panel").html(html);
 
         d3.select("#info-table").select("tbody").selectAll("tr")
@@ -259,7 +254,7 @@ function updateInfoPanel() {
         html += "<table id=\"info-table\" class=\"table table-striped table-condensed table-hover\"><tbody>\n";
         html += "</tbody></table>\n";
         html += "<h4>Total Amounts Paid</h4>\n";
-        html += "<svg></svg";
+        html += "<svg></svg>";
         d3.select("#info-panel").html(html);
 
         d3.select("#info-table").select("tbody").selectAll("tr")
@@ -414,13 +409,27 @@ function clearSearch(e) {
     search();
 }
 
+function updateLabels() {
+    if (d3.event.type == "drag") {
+        var values = value_slider.value(),
+            displayFormat = d3.format("$0,0f");
+
+        d3.select("#value-filter-min").attr("value", displayFormat(values[0]));
+        d3.select("#value-filter-max").attr("value", displayFormat(values[1]));
+    }
+}
+
+function updateSlider() {
+}
+
 function filterData() {
     var selectedYear = +d3.select("#year_select").selectAll("option").filter(function(d) { return this.selected; }).node().value,
         allParties = d3.select("#party_select").selectAll("input").map(function(d) { return +d.value; }),
         selectedParties = d3.select("#party_select").selectAll("input").filter(function(d) { return this.checked; })[0] .map(function(d) { return +d.value; }),
-        selectedReceiptTypes = d3.select("#receipt_type_select").selectAll("input").filter(function(d) { return this.checked; })[0].map(function(d) { return +d.value; });
+        selectedReceiptTypes = d3.select("#receipt_type_select").selectAll("input").filter(function(d) { return this.checked; })[0].map(function(d) { return +d.value; }),
+        valueRange = value_slider.value();
 
-    var filteredNodes = [], allParties = [];
+    var resetControls = false, filteredNodes = [], allParties = [];
 
     d3.keys(party_map).forEach(function(k) {
         node = party_map[k];
@@ -450,6 +459,7 @@ function filterData() {
     } else {
         oldYear = selectedYear;
         selectedParties = allParties;
+        resetControls = true;
     }
 
     d3.keys(entity_map).forEach(function(k) {
@@ -473,10 +483,10 @@ function filterData() {
         }
     });
 
-    update(filteredNodes, allParties, selectedParties);
+    update(filteredNodes, allParties, selectedParties, resetControls);
 }
 
-function update(partyNodes, parties, selectedParties) {
+function update(partyNodes, parties, selectedParties, resetControls) {
     force.stop();
 
     function flattenNodes(roots) {
@@ -499,6 +509,10 @@ function update(partyNodes, parties, selectedParties) {
         });
 
         return nodes;
+    }
+
+    function powerOfTen(d) {
+        return d / Math.pow(10, Math.ceil(Math.log(d) / Math.LN10 - 1e-12)) === 1;
     }
 
     var nodes = flattenNodes(partyNodes),
@@ -532,12 +546,35 @@ function update(partyNodes, parties, selectedParties) {
     var entity_nodes = nodes.filter(function(d) { return d.Type == "Entity"; });
 
     var extents = d3.extent(entity_nodes, function(n) { return n.total; });
+
+
     var start = extents[0],
         end = extents[1],
         mean = d3.mean(entity_nodes, function(d) { return d.total; }),
         median = d3.median(entity_nodes, function(d) { return d.total; });    
 
     sizeScale.domain([start, median, mean, end])
+
+    if (resetControls) {
+        var displayFormat = d3.format("$0,0f");
+        value_slider.scale(d3.scale.log().domain(extents));
+        value_slider.min(extents[0]).max(extents[1]);
+        value_slider.value(extents);
+
+        d3.select("#value-filter-min").attr("value", displayFormat(extents[0]));
+        d3.select("#value-filter-max").attr("value", displayFormat(extents[1]));
+        d3.select("#value-filter").html("");
+        d3.select("#value-filter").call(value_slider);
+        d3.select("#value-filter").selectAll(".tick text")
+            .text(null)
+          .filter(powerOfTen)
+            .text(10)
+          .append("tspan")
+            .attr("dy", "-.5em")
+            .text(function(d) { return Math.round(Math.log(d) / Math.LN10); });
+    }
+
+
 
     nodeElements = nodesG.selectAll(".node")
                        .data(force.nodes(), function(d, i) { 
@@ -640,6 +677,8 @@ function processData(error, data) {
 
     years = d3.extent(data.receipts, function(d) { return +d.Year; });
 
+    //d3.select("#value-filter").call(value_slider);
+
     d3.select("#receipt_type_select").selectAll("option")
         .data(receipt_types)
       .enter().append("div")
@@ -655,13 +694,13 @@ function processData(error, data) {
         .attr("selected", function(y) { return (y == years[1]) ? "selected" : null; })
         .text(function(y) { return y + " - " + (y+1); });
 
-    svg = d3.select("div#vis").append("svg").attr("width", width).attr("height", height);
     svg.append("rect")
         .style("fill", "none")
         .style("pointer-events", "all")
         .attr("width", width)
         .attr("height", height)
         .call(zoom);
+
 
     container = svg.append("g").attr("width", width).attr("height", height);
     linksG = container.append("g").attr("width", width).attr("height", height);
